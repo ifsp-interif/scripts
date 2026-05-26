@@ -82,29 +82,37 @@ def main() -> None:
             campus          TEXT,
             nome_equipe     TEXT,
             nome_resp       TEXT,
+            cpf_resp        TEXT,
             email_resp      TEXT,
             nome_m1         TEXT,
+            cpf_m1          TEXT,
             email_m1        TEXT,
             nome_m2         TEXT,
+            cpf_m2          TEXT,
             email_m2        TEXT,
             nome_m3         TEXT,
+            cpf_m3          TEXT,
             email_m3        TEXT
         )
         """
     )
     for row in rows2:
         cur.execute(
-            "INSERT INTO equipes VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO equipes VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 get(row, 3),   # campus
                 get(row, 2),   # team name
                 get(row, 6),   # advisor name
+                get(row, 7),   # advisor CPF
                 get(row, 8),   # advisor email
                 get(row, 11),  # member 1 name
+                get(row, 13),  # member 1 CPF
                 get(row, 14),  # member 1 email
                 get(row, 18),  # member 2 name
+                get(row, 20),  # member 2 CPF
                 get(row, 21),  # member 2 email
                 get(row, 25),  # member 3 name
+                get(row, 27),  # member 3 CPF
                 get(row, 28),  # member 3 email
             ),
         )
@@ -117,10 +125,11 @@ def main() -> None:
             c.nome_coord,
             c.email_coord,
             e.nome_resp,
+            e.cpf_resp,
             e.email_resp,
-            e.nome_m1, e.email_m1,
-            e.nome_m2, e.email_m2,
-            e.nome_m3, e.email_m3
+            e.nome_m1, e.cpf_m1, e.email_m1,
+            e.nome_m2, e.cpf_m2, e.email_m2,
+            e.nome_m3, e.cpf_m3, e.email_m3
         FROM equipes e
         LEFT JOIN coordenadores c
                ON LOWER(TRIM(e.campus)) = LOWER(TRIM(c.campus))
@@ -136,12 +145,16 @@ def main() -> None:
         "Nome do Coordenador do Campus",
         "Email do Coordenador do Campus",
         "Nome do Responsável pela Equipe",
+        "CPF do Responsável pela Equipe",
         "Email do Responsável pela Equipe",
         "Nome Participante 1",
+        "CPF Participante 1",
         "Email Participante 1",
         "Nome Participante 2",
+        "CPF Participante 2",
         "Email Participante 2",
         "Nome Participante 3",
+        "CPF Participante 3",
         "Email Participante 3",
     ]
 

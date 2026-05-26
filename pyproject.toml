@@ -1,0 +1,46 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "interif-scripts"
+version = "0.1.0"
+description = "Scripts de apoio à organização do InterIF (geração de CSV, envio de e-mails e validação de CPFs)"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+authors = [{ name = "Daniel Correa Lobato", email = "correalobatodaniel@gmail.com" }]
+
+dependencies = [
+    # cpf_check.py
+    "cpf>=3.0",
+    "rich>=13.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.4",
+    "pytest>=8.0",
+]
+
+[project.scripts]
+interif-gerar-csv  = "equipes_interif:main"   # python equipes_interif.py
+interif-emails     = "send_emails:main"        # python send_emails.py
+interif-cpf        = "cpf_check:main"          # python cpf_check.py
+
+# ── Hatchling: inclui os scripts avulsos (sem __init__.py) ───────────────────
+[tool.hatch.build.targets.wheel]
+packages = ["equipes_interif.py", "send_emails.py", "cpf_check.py"]
+
+# ── Ruff (linter / formatter) ────────────────────────────────────────────────
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM"]
+ignore = ["E501"]   # linha longa — controlada pelo formatter
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
