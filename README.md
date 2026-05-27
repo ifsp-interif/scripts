@@ -83,7 +83,7 @@ uv run python gerar_placas.py --send                  # gera PDFs e envia ao coo
 
 ## 1. `equipes_interif.py` — Gerar o CSV de equipes
 
-Lê duas planilhas do Google Sheets (inscrições de campi e de equipes), cruza os dados e salva o resultado em `equipes_interif.csv`.
+Lê duas planilhas do Google Sheets (inscrições de campi e de equipes), cruza os dados e salva o resultado em `equipes_interif.csv`. Também salva `coordenadores_interif.csv` com todos os coordenadores de campi inscritos.
 
 ### Uso
 
@@ -97,6 +97,8 @@ uv run python equipes_interif.py --campi <ID_PLANILHA_CAMPI> --teams <ID_PLANILH
 |-----------|-----------|
 | `--campi` | ID da planilha Google Sheets com as inscrições de coordenadores de campus |
 | `--teams` | ID da planilha Google Sheets com as inscrições de equipes |
+| `--output ARQUIVO` / `-o ARQUIVO` | CSV de equipes gerado (padrão: `equipes_interif.csv`) |
+| `--coordenadores ARQUIVO` / `-c ARQUIVO` | CSV de coordenadores gerado (padrão: `coordenadores_interif.csv`) |
 
 O ID da planilha é a string que aparece na URL entre `/d/` e `/edit`:
 `https://docs.google.com/spreadsheets/d/**ID_AQUI**/edit`
@@ -111,6 +113,8 @@ Arquivo `equipes_interif.csv` no mesmo diretório do script, com as colunas:
 - Nome, email e CPF dos Participantes 1, 2 e 3
 - Tamanho de camiseta dos Participantes 1, 2 e 3
 - Quem mais deve receber as credenciais de acesso?
+
+Arquivo `coordenadores_interif.csv` com todos os campi inscritos na planilha de coordenadores, incluindo aqueles sem equipes inscritas.
 
 Equipes sem coordenador de campus correspondente são listadas no terminal ao final.
 
@@ -141,7 +145,7 @@ uv run python cpf_check.py [ARQUIVO] [opções]
 |-------|--------|-----------|
 | `--invalidos` | `-i` | Exibe apenas os CPFs inválidos |
 | `--notificar` | `-n` | Envia email para cada pessoa com CPF inválido pedindo a correção |
-| `--dry-run` | | Simula o envio de emails sem disparar mensagens (requer `--notificar`) |
+| `--dry-run` | | Mostra um preview dos emails no terminal sem chamar o `gws` (requer `--notificar`) |
 | `--output SAIDA.csv` | `-o` | Exporta o resultado exibido como arquivo CSV |
 
 ### Emails de notificação (`--notificar`)
@@ -188,22 +192,28 @@ O assunto de todos os emails inclui a data e hora de geração (ex.: `até 2026-
 
 ```bash
 uv run python inscricoes_atuais.py
+uv run python inscricoes_atuais.py --dry-run
+uv run python inscricoes_atuais.py --no-teams --dry-run
 ```
+
+Com `--no-teams`/`-n`, o script usa também `coordenadores_interif.csv`, envia somente para coordenadores de campi que não possuem equipes inscritas e manda para `EMAIL_INTERIF` um resumo com a lista desses campi.
 
 ### Configuração
 
-Os textos dos emails (`COORD_*`, `RESP_*`, `SUMMARY_*`) e o destinatário do resumo (`EMAIL_INTERIF`) vêm de **`config.py`** — edite lá para mudar os textos.
+Os textos dos emails (`COORD_*`, `RESP_*`, `SUMMARY_*`, `NO_TEAMS_*`) e o destinatário do resumo (`EMAIL_INTERIF`) vêm de **`config.py`** — edite lá para mudar os textos.
 
-As duas variáveis locais ao script são:
+Principais opções:
 
-| Variável | Descrição |
-|----------|-----------|
-| `CSV_FILE` | Caminho para o CSV de equipes (padrão: `equipes_interif.csv`) |
-| `DRY_RUN` | `True` para simular o envio sem disparar emails |
+| Opção | Descrição |
+|-------|-----------|
+| `--csv ARQUIVO` | CSV de equipes (padrão: `equipes_interif.csv`) |
+| `--coordenadores ARQUIVO` / `-c ARQUIVO` | CSV de coordenadores (padrão: `coordenadores_interif.csv`) |
+| `--no-teams` / `-n` | Envia somente para coordenadores de campi sem equipes |
+| `--dry-run` | Mostra um preview dos emails no terminal sem chamar o `gws` |
 
 ### Teste sem envio
 
-Defina `DRY_RUN = True` no topo do arquivo antes de executar.
+Use `--dry-run` antes de executar o envio real para conferir destinatário, assunto e corpo de cada email.
 
 ---
 
@@ -378,7 +388,7 @@ uv run python gerar_etiquetas.py [opções]
 | `--campi ARQUIVO` | | CSV de siglas de campus (padrão: `assets/ifsp_campi.csv`) |
 | `--output DIR` | `-o` | Diretório de saída dos PDFs (padrão: `etiquetas/`) |
 | `--send` | `-s` | Envia cada PDF ao coordenador do campus via `gws gmail +send --attach` |
-| `--dry-run` | | Gera os PDFs mas simula o envio sem disparar emails |
+| `--dry-run` | | Gera os PDFs e mostra um preview dos emails no terminal sem chamar o `gws` |
 
 ### Exemplos
 
@@ -417,7 +427,7 @@ uv run python gerar_placas.py [opções]
 | `--campi ARQUIVO` | | CSV de siglas de campus (padrão: `assets/ifsp_campi.csv`) |
 | `--output DIR` | `-o` | Diretório de saída dos PDFs (padrão: `placas/`) |
 | `--send` | `-s` | Envia cada PDF ao coordenador do campus via `gws gmail +send --attach` |
-| `--dry-run` | | Gera os PDFs mas simula o envio sem disparar emails |
+| `--dry-run` | | Gera os PDFs e mostra um preview dos emails no terminal sem chamar o `gws` |
 
 ### Exemplos
 
@@ -449,6 +459,7 @@ uv run python gerar_placas.py -o output/placas
 | `COORD_SUBJECT` / `COORD_PRE` / `COORD_POST` | `inscricoes_atuais` | Email para coordenadores de campus |
 | `RESP_SUBJECT` / `RESP_PRE` / `RESP_POST` | `inscricoes_atuais` | Email para técnicos responsáveis |
 | `SUMMARY_SUBJECT` / `SUMMARY_PRE` / `SUMMARY_POST` | `inscricoes_atuais` | Email de resumo de inscrições |
+| `NO_TEAMS_SUBJECT` / `NO_TEAMS_BODY` | `inscricoes_atuais` | Email para coordenadores de campi sem equipes |
 | `NOTIFY_SUBJECT` / `NOTIFY_BODY` | `cpf_check` | Notificação de CPF inválido |
 | `CRED_SUBJECT_PREFIX` | `enviar_credenciais` | Prefixo do assunto dos emails de credenciais |
 | `ETIQ_FONTE_MONO` | `gerar_etiquetas` | Nome do arquivo de fonte monospaced (em `assets/`) |

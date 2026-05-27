@@ -17,6 +17,7 @@ from pathlib import Path
 
 SHEET_NAME = "Respostas ao formulário 1"
 OUTPUT_FILE = Path(__file__).parent / "equipes_interif.csv"
+COORD_OUTPUT_FILE = Path(__file__).parent / "coordenadores_interif.csv"
 
 # ── Column layout of the *teams* sheet (0-based, header row excluded) ─────────
 # Adjust these constants if the spreadsheet columns are ever reordered.
@@ -88,6 +89,11 @@ def parse_args() -> argparse.Namespace:
         default=str(OUTPUT_FILE),
         help=f"Caminho do CSV de saída (padrão: {OUTPUT_FILE.name})",
     )
+    parser.add_argument(
+        "--coordenadores", "-c", metavar="ARQUIVO",
+        default=str(COORD_OUTPUT_FILE),
+        help=f"Caminho do CSV de coordenadores (padrão: {COORD_OUTPUT_FILE.name})",
+    )
     return parser.parse_args()
 
 
@@ -104,12 +110,26 @@ def main() -> None:
     team_headers, rows2 = read_sheet(args.teams, SHEET_NAME)
     print(f"  {len(rows2)} linhas lidas")
 
-    # Build coordinator lookup: normalised_campus → (nome, email)
-    coord_map: dict[str, tuple[str, str]] = {}
+    # Build coordinator lookup: normalised_campus → (campus original, nome, email)
+    coord_map: dict[str, tuple[str, str, str]] = {}
     for row in rows1:
         campus = get(row, 3).strip()
         if campus:
-            coord_map[campus.lower()] = (get(row, 2), get(row, 4))
+            coord_map[campus.lower()] = (campus, get(row, 2), get(row, 4))
+
+    coord_output_path = Path(args.coordenadores)
+    coord_rows = [
+        [campus, nome, email]
+        for _, (campus, nome, email) in sorted(coord_map.items(), key=lambda item: item[0])
+    ]
+    with open(coord_output_path, "w", newline="", encoding="utf-8-sig") as f:
+        writer = csv.writer(f)
+        writer.writerow([
+            "Campus",
+            "Nome do Coordenador do Campus",
+            "Email do Coordenador do Campus",
+        ])
+        writer.writerows(coord_rows)
 
     # Output headers: rename key columns; keep all others with original names.
     # Then splice coordinator columns in right after Campus.
@@ -131,7 +151,7 @@ def main() -> None:
             continue
 
         campus = get(row, CAMPUS_COL)
-        coord_nome, coord_email = coord_map.get(campus.lower(), ("", ""))
+        _, coord_nome, coord_email = coord_map.get(campus.lower(), ("", "", ""))
 
         values = [get(row, i) for i in range(len(team_headers))]
         values = (
@@ -153,6 +173,7 @@ def main() -> None:
         writer.writerows(result_rows)
 
     print(f"\n{len(result_rows)} equipes salvas em {output_path}")
+    print(f"{len(coord_rows)} coordenador(es) salvo(s) em {coord_output_path}")
     print(f"Colunas no CSV: {len(output_headers)}")
 
     # Report teams with no matching campus coordinator

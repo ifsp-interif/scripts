@@ -307,7 +307,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Simula o envio de emails sem de fato enviá-los (passa --dry-run ao gws)",
+        help="Mostra um preview dos emails no terminal sem chamar o gws",
     )
     parser.add_argument(
         "--output", "-o",

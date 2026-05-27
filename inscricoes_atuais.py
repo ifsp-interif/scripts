@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Envia emails de confirmação de inscrição para coordenadores e responsáveis."""
 
+import argparse
 import csv
 import subprocess
 from collections import defaultdict
@@ -10,6 +11,8 @@ from config import (
     COORD_POST,
     COORD_PRE,
     COORD_SUBJECT,
+    NO_TEAMS_BODY,
+    NO_TEAMS_SUBJECT,
     RESP_POST,
     RESP_PRE,
     RESP_SUBJECT,
@@ -24,7 +27,8 @@ from config import (
 # ── Configuração local ────────────────────────────────────────────────────────
 
 CSV_FILE = "equipes_interif.csv"
-DRY_RUN  = False   # True → não envia emails de verdade
+COORD_CSV_FILE = "coordenadores_interif.csv"
+DRY_RUN = False   # True → não envia emails de verdade
 
 _now = datetime.now()
 _TIMESTAMP = _now.strftime("até %Y-%m-%d %Hh%Mmin")
@@ -35,11 +39,33 @@ def first_name(full_name: str) -> str:
 
 
 def send_email(to: str, subject: str, body: str) -> None:
-    cmd = ["gws", "gmail", "+send", "--to", to, "--subject", subject, "--body", body]
     if DRY_RUN:
-        cmd.append("--dry-run")
+        print(f"\n--- DRY-RUN: email para {to} ---")
+        print(f"Assunto: {subject}")
+        print()
+        print(body)
+        print("--- fim do email ---")
+        return
+
+    cmd = ["gws", "gmail", "+send", "--to", to, "--subject", subject, "--body", body]
     print(f"  → Enviando para {to} ...")
-    subprocess.run(cmd, check=True)
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    except subprocess.CalledProcessError as exc:
+        print("    ERRO: envio falhou")
+        if exc.stdout:
+            print(exc.stdout.strip())
+        if exc.stderr:
+            print(exc.stderr.strip())
+        raise
+
+    print("    OK: enviado")
+    if result.stdout.strip():
+        print(result.stdout.strip())
+
+
+def normalize_campus(campus: str) -> str:
+    return campus.strip().lower()
 
 
 def load_teams(csv_file: str) -> list[dict]:
@@ -64,6 +90,22 @@ def load_teams(csv_file: str) -> list[dict]:
                 "participantes": participants,
             })
     return teams
+
+
+def load_coordinators(csv_file: str) -> list[dict]:
+    coordinators = []
+    with open(csv_file, newline="", encoding="utf-8-sig") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            campus = row.get("Campus", "").strip()
+            if not campus:
+                continue
+            coordinators.append({
+                "campus": campus,
+                "coord_nome": row.get("Nome do Coordenador do Campus", "").strip(),
+                "coord_email": row.get("Email do Coordenador do Campus", "").strip().lower(),
+            })
+    return coordinators
 
 
 def group_by_coordinator(teams: list[dict]) -> dict:
@@ -130,6 +172,49 @@ def send_summary_email(por_campus: dict) -> None:
     send_email(SUMMARY_TO, f"{SUMMARY_SUBJECT} {_TIMESTAMP}", body)
 
 
+def find_no_teams_coordinators(coordinators: list[dict], teams: list[dict]) -> list[dict]:
+    campi_com_equipes = {normalize_campus(t["campus"]) for t in teams}
+    return [
+        coord
+        for coord in sorted(coordinators, key=lambda c: c["campus"])
+        if normalize_campus(coord["campus"]) not in campi_com_equipes
+    ]
+
+
+def send_no_teams_emails(no_teams_coordinators: list[dict]) -> int:
+    print("\n=== Emails para coordenadores de campi sem equipes ===")
+    count = 0
+
+    for coord in no_teams_coordinators:
+        email = coord["coord_email"]
+        if not email:
+            print(f"  Aviso: sem email de coordenador para {coord['campus']} — envio ignorado")
+            continue
+
+        body = NO_TEAMS_BODY.format(
+            nome=first_name(coord["coord_nome"]),
+            campus=coord["campus"],
+        )
+        send_email(email, f"{NO_TEAMS_SUBJECT} {_TIMESTAMP}", body)
+        count += 1
+
+    return count
+
+
+def send_no_teams_summary_email(no_teams_coordinators: list[dict]) -> None:
+    print("\n=== Email de resumo para a organização ===")
+    lines = "\n".join(f"- {coord['campus']}" for coord in no_teams_coordinators)
+    total = len(no_teams_coordinators)
+    body = (
+        "Seguem abaixo os campi sem equipes inscritas:\n\n"
+        + (lines or "- Nenhum campus sem equipes inscritas")
+        + f"\n\nTotal: {total} campus sem equipes inscritas"
+        + "\n"
+        + SUMMARY_POST
+    )
+    send_email(SUMMARY_TO, f"{NO_TEAMS_SUBJECT} — resumo {_TIMESTAMP}", body)
+
+
 def send_advisor_emails(por_resp: dict) -> int:
     print("\n=== Emails para responsáveis pelas equipes ===")
     count = 0
@@ -147,9 +232,57 @@ def send_advisor_emails(por_resp: dict) -> int:
     return count
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Envia emails de confirmação de inscrição para coordenadores e responsáveis."
+    )
+    parser.add_argument(
+        "--csv",
+        default=CSV_FILE,
+        metavar="ARQUIVO",
+        help=f"Caminho do CSV de equipes (padrão: {CSV_FILE})",
+    )
+    parser.add_argument(
+        "--coordenadores",
+        "-c",
+        default=COORD_CSV_FILE,
+        metavar="ARQUIVO",
+        help=f"Caminho do CSV de coordenadores (padrão: {COORD_CSV_FILE})",
+    )
+    parser.add_argument(
+        "--no-teams",
+        "-n",
+        action="store_true",
+        help="Envia somente para coordenadores de campi que não possuem equipes inscritas",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Simula o envio sem disparar emails",
+    )
+    return parser.parse_args()
+
+
 def main() -> None:
-    teams = load_teams(CSV_FILE)
-    print(f"Carregadas {len(teams)} equipes de '{CSV_FILE}'.")
+    global DRY_RUN
+
+    args = parse_args()
+    DRY_RUN = args.dry_run
+
+    teams = load_teams(args.csv)
+    print(f"Carregadas {len(teams)} equipes de '{args.csv}'.")
+
+    if args.no_teams:
+        coordinators = load_coordinators(args.coordenadores)
+        print(f"Carregados {len(coordinators)} coordenador(es) de '{args.coordenadores}'.")
+        no_teams_coordinators = find_no_teams_coordinators(coordinators, teams)
+        n_no_teams = send_no_teams_emails(no_teams_coordinators)
+        send_no_teams_summary_email(no_teams_coordinators)
+        print(
+            f"\nPronto! {n_no_teams} email(s) para coordenadores de campi sem equipes, "
+            f"1 resumo para {SUMMARY_TO}."
+        )
+        return
 
     por_campus = group_by_coordinator(teams)
     por_resp   = group_by_advisor(teams)

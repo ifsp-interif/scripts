@@ -43,6 +43,15 @@ SUMMARY_SUBJECT = f"Resumo de inscrições — {TITULO_EVENTO}"
 SUMMARY_PRE     = "Seguem abaixo os totais de equipes inscritas por campus:\n"
 SUMMARY_POST    = "\nEste é um email automático gerado ao final do envio das confirmações."
 
+NO_TEAMS_SUBJECT = f"Inscrições de equipes no {TITULO_EVENTO}"
+NO_TEAMS_BODY = (
+    f"Olá, {{nome}}!\n\n"
+    f"Identificamos que o campus {{campus}} ainda não possui equipes inscritas no {TITULO_EVENTO}.\n\n"
+    f"Em caso de dúvidas ou necessidade de apoio, entre em contato com a organização.\n\n"
+    f"Atenciosamente,\n"
+    f"Organização {TITULO_EVENTO}"
+)
+
 # ── Notificação de CPF inválido (cpf_check.py) ────────────────────────────────
 # Placeholders disponíveis: {nome}, {cpf}, {interif_email}  (preenchidos em runtime)
 

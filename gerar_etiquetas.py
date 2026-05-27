@@ -196,9 +196,12 @@ def _send_pdf(
 ) -> None:
     """Envia um PDF como anexo via `gws gmail +send`. Em dry-run apenas exibe."""
     if dry_run:
-        print(f"  -> Para: {to}")
-        print(f"     Assunto: {subject}")
-        print(f"     Anexo: {attach}")
+        print(f"\n--- DRY-RUN: email para {to} ---")
+        print(f"Assunto: {subject}")
+        print(f"Anexo: {attach}")
+        print()
+        print(body)
+        print("--- fim do email ---")
         return
 
     print(f"  -> Enviando para {to} ...")
