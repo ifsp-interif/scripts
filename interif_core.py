@@ -133,6 +133,7 @@ def load_teams(path: Path) -> list[dict]:
                 "coord_nome":   row.get("Nome do Coordenador do Campus",  "").strip(),
                 "coord_email":  row.get("Email do Coordenador do Campus", "").strip().lower(),
                 "resp_nome":    row.get("Nome do Responsável pela Equipe",  "").strip(),
+                "resp_cpf":     row.get("CPF do Responsável pela Equipe",   "").strip(),
                 "resp_email":   row.get("Email do Responsável pela Equipe", "").strip().lower(),
                 "part_1_nome":  row.get("Nome Participante 1",  "").strip(),
                 "part_1_email": row.get("Email Participante 1", "").strip().lower(),
