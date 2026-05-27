@@ -1,0 +1,20 @@
+# Ambiente virtual e cache Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Saídas geradas pelos scripts
+output/
+etiquetas/
+placas/
+equipes_interif.csv
+equipes_interif_*.csv
+
+# Fontes (arquivos binários; veja assets/FONTES.md para obter as fontes)
+assets/*.ttf
+assets/*.otf
+
+# Arquivos de configuração de segredos
+config_local.py

@@ -6,47 +6,25 @@ import subprocess
 from collections import defaultdict
 from datetime import datetime
 
-# ── Configuração dos emails ──────────────────────────────────────────────────
-# Edite apenas esta seção para ajustar os textos sem mexer na lógica.
+from config import (
+    COORD_POST,
+    COORD_PRE,
+    COORD_SUBJECT,
+    RESP_POST,
+    RESP_PRE,
+    RESP_SUBJECT,
+    SUMMARY_POST,
+    SUMMARY_PRE,
+    SUMMARY_SUBJECT,
+)
+from config import (
+    EMAIL_INTERIF as SUMMARY_TO,
+)
+
+# ── Configuração local ────────────────────────────────────────────────────────
 
 CSV_FILE = "equipes_interif.csv"
-DRY_RUN  = False   # True → passa --dry-run para o gws, sem enviar de verdade
-
-# Email para coordenadores de campus
-COORD_SUBJECT = "Equipes do IX InterIF inscritas no seu campus"
-COORD_PRE = (
-    "Olá, {nome}!\n\n"
-    "Seguem abaixo as equipes inscritas no IX InterIF pelo campus {campus}:\n"
-)
-COORD_POST = (
-    "\nEm caso de dúvidas ou necessidade de alteração, entre em contato com a organização.\n\n"
-    "Atenciosamente,\n"
-    "Organização INTERIF"
-)
-
-# Email para responsáveis pelas equipes
-RESP_SUBJECT = "Suas equipes inscritas no IX InterIF"
-RESP_PRE = (
-    "Olá, {nome}!\n\n"
-    "Seguem abaixo as equipes sob sua responsabilidade inscritas no IX InterIF:\n"
-)
-RESP_POST = (
-    "\nEm caso de dúvidas ou necessidade de alteração, entre em contato com a organização.\n\n"
-    "Atenciosamente,\n"
-    "Organização IX InterIF"
-)
-
-# Email de resumo para a organização
-SUMMARY_TO      = "interif@ifsp.edu.br"
-SUMMARY_SUBJECT = "Resumo de inscrições IX InterIF"
-SUMMARY_PRE = (
-    "Seguem abaixo os totais de equipes inscritas por campus:\n"
-)
-SUMMARY_POST = (
-    "\nEste é um email automático gerado ao final do envio das confirmações."
-)
-
-# ── Fim da configuração ──────────────────────────────────────────────────────
+DRY_RUN  = False   # True → não envia emails de verdade
 
 _now = datetime.now()
 _TIMESTAMP = _now.strftime("até %Y-%m-%d %Hh%Mmin")

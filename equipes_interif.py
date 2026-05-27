@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """
-Downloads two IFSP InterIF spreadsheets, joins them by Campus in a SQLite
-in-memory database, and saves a team roster to equipes_interif.csv.
+Downloads two IFSP InterIF spreadsheets, joins them by Campus, and saves a
+full team roster to equipes_interif.csv.
+
+All columns from the teams spreadsheet are preserved; key columns are renamed
+to canonical names expected by the downstream scripts (cpf_check.py,
+inscricoes_atuais.py).  Two coordinator columns are inserted right after Campus.
 """
 
 import argparse
 import csv
 import json
-import sqlite3
 import subprocess
 import sys
 from pathlib import Path
@@ -15,6 +18,36 @@ from pathlib import Path
 SHEET_NAME = "Respostas ao formulário 1"
 OUTPUT_FILE = Path(__file__).parent / "equipes_interif.csv"
 
+# ── Column layout of the *teams* sheet (0-based, header row excluded) ─────────
+# Adjust these constants if the spreadsheet columns are ever reordered.
+
+CAMPUS_COL    = 3   # Campus
+TEAM_NAME_COL = 2   # Nome da Equipe
+
+# Key columns that are renamed to canonical names used by downstream scripts.
+# All other columns are kept with their original spreadsheet header.
+TEAM_KEY_COLUMNS: dict[int, str] = {
+    2:  "Nome da Equipe",
+    3:  "Campus",
+    6:  "Nome do Responsável pela Equipe",
+    7:  "CPF do Responsável pela Equipe",
+    8:  "Email do Responsável pela Equipe",
+    11: "Nome Participante 1",
+    13: "CPF Participante 1",
+    14: "Email Participante 1",
+    18: "Nome Participante 2",
+    20: "CPF Participante 2",
+    21: "Email Participante 2",
+    25: "Nome Participante 3",
+    27: "CPF Participante 3",
+    28: "Email Participante 3",
+}
+
+# Coordinator columns are inserted at this position (right after Campus).
+_COORD_INSERT_POS = CAMPUS_COL + 1   # → index 4 in the output
+
+
+# ── I/O helpers ───────────────────────────────────────────────────────────────
 
 def read_sheet(spreadsheet_id: str, sheet_name: str) -> tuple[list[str], list[list[str]]]:
     result = subprocess.run(
@@ -39,11 +72,26 @@ def get(row: list[str], idx: int) -> str:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Gera equipes_interif.csv a partir de duas planilhas Google Sheets.")
-    parser.add_argument("--campi", required=True, metavar="SHEET_ID", help="ID da planilha de inscrição de campi")
-    parser.add_argument("--teams", required=True, metavar="SHEET_ID", help="ID da planilha de inscrição de equipes")
+    parser = argparse.ArgumentParser(
+        description="Gera equipes_interif.csv a partir de duas planilhas Google Sheets."
+    )
+    parser.add_argument(
+        "--campi", required=True, metavar="SHEET_ID",
+        help="ID da planilha de inscrição de campi",
+    )
+    parser.add_argument(
+        "--teams", required=True, metavar="SHEET_ID",
+        help="ID da planilha de inscrição de equipes",
+    )
+    parser.add_argument(
+        "--output", "-o", metavar="ARQUIVO",
+        default=str(OUTPUT_FILE),
+        help=f"Caminho do CSV de saída (padrão: {OUTPUT_FILE.name})",
+    )
     return parser.parse_args()
 
+
+# ── Main ──────────────────────────────────────────────────────────────────────
 
 def main() -> None:
     args = parse_args()
@@ -53,124 +101,66 @@ def main() -> None:
     print(f"  {len(rows1)} linhas lidas")
 
     print("Lendo planilha 2 (equipes)...")
-    _, rows2 = read_sheet(args.teams, SHEET_NAME)
+    team_headers, rows2 = read_sheet(args.teams, SHEET_NAME)
     print(f"  {len(rows2)} linhas lidas")
 
-    conn = sqlite3.connect(":memory:")
-    cur = conn.cursor()
-
-    cur.execute(
-        """
-        CREATE TABLE coordenadores (
-            campus          TEXT,
-            nome_coord      TEXT,
-            email_coord     TEXT
-        )
-        """
-    )
+    # Build coordinator lookup: normalised_campus → (nome, email)
+    coord_map: dict[str, tuple[str, str]] = {}
     for row in rows1:
-        campus = get(row, 3)
+        campus = get(row, 3).strip()
         if campus:
-            cur.execute(
-                "INSERT INTO coordenadores VALUES (?, ?, ?)",
-                (campus, get(row, 2), get(row, 4)),
-            )
+            coord_map[campus.lower()] = (get(row, 2), get(row, 4))
 
-    cur.execute(
-        """
-        CREATE TABLE equipes (
-            campus          TEXT,
-            nome_equipe     TEXT,
-            nome_resp       TEXT,
-            cpf_resp        TEXT,
-            email_resp      TEXT,
-            nome_m1         TEXT,
-            cpf_m1          TEXT,
-            email_m1        TEXT,
-            nome_m2         TEXT,
-            cpf_m2          TEXT,
-            email_m2        TEXT,
-            nome_m3         TEXT,
-            cpf_m3          TEXT,
-            email_m3        TEXT
-        )
-        """
-    )
-    for row in rows2:
-        cur.execute(
-            "INSERT INTO equipes VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                get(row, 3),   # campus
-                get(row, 2),   # team name
-                get(row, 6),   # advisor name
-                get(row, 7),   # advisor CPF
-                get(row, 8),   # advisor email
-                get(row, 11),  # member 1 name
-                get(row, 13),  # member 1 CPF
-                get(row, 14),  # member 1 email
-                get(row, 18),  # member 2 name
-                get(row, 20),  # member 2 CPF
-                get(row, 21),  # member 2 email
-                get(row, 25),  # member 3 name
-                get(row, 27),  # member 3 CPF
-                get(row, 28),  # member 3 email
-            ),
-        )
-
-    cur.execute(
-        """
-        SELECT
-            e.nome_equipe,
-            e.campus,
-            c.nome_coord,
-            c.email_coord,
-            e.nome_resp,
-            e.cpf_resp,
-            e.email_resp,
-            e.nome_m1, e.cpf_m1, e.email_m1,
-            e.nome_m2, e.cpf_m2, e.email_m2,
-            e.nome_m3, e.cpf_m3, e.email_m3
-        FROM equipes e
-        LEFT JOIN coordenadores c
-               ON LOWER(TRIM(e.campus)) = LOWER(TRIM(c.campus))
-        ORDER BY e.campus, e.nome_equipe
-        """
-    )
-    result_rows = cur.fetchall()
-    conn.close()
-
-    headers = [
-        "Nome da Equipe",
-        "Campus",
-        "Nome do Coordenador do Campus",
-        "Email do Coordenador do Campus",
-        "Nome do Responsável pela Equipe",
-        "CPF do Responsável pela Equipe",
-        "Email do Responsável pela Equipe",
-        "Nome Participante 1",
-        "CPF Participante 1",
-        "Email Participante 1",
-        "Nome Participante 2",
-        "CPF Participante 2",
-        "Email Participante 2",
-        "Nome Participante 3",
-        "CPF Participante 3",
-        "Email Participante 3",
+    # Output headers: rename key columns; keep all others with original names.
+    # Then splice coordinator columns in right after Campus.
+    renamed: list[str] = [
+        TEAM_KEY_COLUMNS.get(i, h)
+        for i, h in enumerate(team_headers)
     ]
+    output_headers: list[str] = (
+        renamed[:_COORD_INSERT_POS]
+        + ["Nome do Coordenador do Campus", "Email do Coordenador do Campus"]
+        + renamed[_COORD_INSERT_POS:]
+    )
 
-    with open(OUTPUT_FILE, "w", newline="", encoding="utf-8-sig") as f:
+    # Build output rows (skip rows without a team name)
+    result_rows: list[list[str]] = []
+    for row in rows2:
+        team_name = get(row, TEAM_NAME_COL)
+        if not team_name:
+            continue
+
+        campus = get(row, CAMPUS_COL)
+        coord_nome, coord_email = coord_map.get(campus.lower(), ("", ""))
+
+        values = [get(row, i) for i in range(len(team_headers))]
+        values = (
+            values[:_COORD_INSERT_POS]
+            + [coord_nome, coord_email]
+            + values[_COORD_INSERT_POS:]
+        )
+        result_rows.append(values)
+
+    # Sort by campus, then team name (case-insensitive)
+    result_rows.sort(
+        key=lambda r: (r[CAMPUS_COL].lower(), r[TEAM_NAME_COL].lower())
+    )
+
+    output_path = Path(args.output)
+    with open(output_path, "w", newline="", encoding="utf-8-sig") as f:
         writer = csv.writer(f)
-        writer.writerow(headers)
+        writer.writerow(output_headers)
         writer.writerows(result_rows)
 
-    print(f"\n{len(result_rows)} equipes salvas em {OUTPUT_FILE}")
+    print(f"\n{len(result_rows)} equipes salvas em {output_path}")
+    print(f"Colunas no CSV: {len(output_headers)}")
 
     # Report teams with no matching campus coordinator
-    unmatched = [r for r in result_rows if not r[2]]
+    unmatched = [r for r in result_rows if not r[_COORD_INSERT_POS]]
     if unmatched:
         print(f"\nAtenção: {len(unmatched)} equipe(s) sem coordenador de campus correspondente:")
         for r in unmatched:
-            print(f"  - {r[0]} ({r[1]})")
+            print(f"  - {r[TEAM_NAME_COL]} ({r[CAMPUS_COL]})")
 
 
 if __name__ == "__main__":

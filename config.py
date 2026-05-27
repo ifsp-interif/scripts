@@ -1,0 +1,90 @@
+"""
+Constantes específicas da edição — edite este arquivo a cada ano/fase.
+
+Importado por todos os scripts InterIF; sem dependências externas.
+"""
+
+# ── Identidade do evento ──────────────────────────────────────────────────────
+
+TITULO_EVENTO = "IX InterIF — Fase Local"
+EMAIL_INTERIF = "interif@ifsp.edu.br"
+
+# ── BOCA ──────────────────────────────────────────────────────────────────────
+
+SALT         = "salt"
+SECRET_GERAL = "geral_abc"
+
+# ── Emails de confirmação de inscrição (inscricoes_atuais.py) ────────────────
+# Placeholders disponíveis:  {nome}, {campus}  (preenchidos em runtime)
+
+COORD_SUBJECT = f"Equipes do {TITULO_EVENTO} inscritas no seu campus"
+COORD_PRE = (
+    f"Olá, {{nome}}!\n\n"
+    f"Seguem abaixo as equipes inscritas no {TITULO_EVENTO} pelo campus {{campus}}:\n"
+)
+COORD_POST = (
+    f"\nEm caso de dúvidas ou necessidade de alteração, entre em contato com a organização.\n\n"
+    f"Atenciosamente,\n"
+    f"Organização {TITULO_EVENTO}"
+)
+
+RESP_SUBJECT = f"Suas equipes inscritas no {TITULO_EVENTO}"
+RESP_PRE = (
+    f"Olá, {{nome}}!\n\n"
+    f"Seguem abaixo as equipes sob sua responsabilidade inscritas no {TITULO_EVENTO}:\n"
+)
+RESP_POST = (
+    f"\nEm caso de dúvidas ou necessidade de alteração, entre em contato com a organização.\n\n"
+    f"Atenciosamente,\n"
+    f"Organização {TITULO_EVENTO}"
+)
+
+SUMMARY_SUBJECT = f"Resumo de inscrições — {TITULO_EVENTO}"
+SUMMARY_PRE     = "Seguem abaixo os totais de equipes inscritas por campus:\n"
+SUMMARY_POST    = "\nEste é um email automático gerado ao final do envio das confirmações."
+
+# ── Notificação de CPF inválido (cpf_check.py) ────────────────────────────────
+# Placeholders disponíveis: {nome}, {cpf}, {interif_email}  (preenchidos em runtime)
+
+NOTIFY_SUBJECT = f"Atualização de CPF — {TITULO_EVENTO}"
+NOTIFY_BODY = (
+    f"Olá, {{nome}}!\n\n"
+    f"Identificamos que o CPF {{cpf}} registrado para você no {TITULO_EVENTO} é inválido.\n\n"
+    f"Por favor, envie seu CPF correto para {{interif_email}} o mais breve possível "
+    f"para garantir sua participação no evento.\n\n"
+    f"Atenciosamente,\n"
+    f"Organização {TITULO_EVENTO}"
+)
+
+# ── Credenciais de acesso (enviar_credenciais.py) ─────────────────────────────
+
+CRED_SUBJECT_PREFIX = f"Credenciais de acesso — {TITULO_EVENTO}"
+
+# ── Etiquetas de credenciais (gerar_etiquetas.py) ────────────────────────────────
+# Fonte monospaced usada para username/password. O arquivo deve existir em assets/.
+
+ETIQ_FONTE_MONO     = "DejaVuSansMono.ttf"
+ETIQ_SUBJECT        = f"Etiquetas de credenciais — {TITULO_EVENTO}"
+ETIQ_BODY_TEMPLATE  = (
+    "Olá, {nome}!\n\n"
+    "Segue em anexo as etiquetas de credenciais das equipes do campus {campus} "
+    f"para o {TITULO_EVENTO}.\n\n"
+    f"Atenciosamente,\nOrganização {TITULO_EVENTO}"
+)
+
+# ── Placas de identificação (gerar_placas.py) ────────────────────────────────
+# Placeholders em PLACA_BODY_TEMPLATE: {nome}, {campus}  (preenchidos em runtime)
+
+PLACA_TITULO_LINHA1   = "IX MARATONA DE PROGRAMAÇÃO"   # linha maior no cabeçalho
+PLACA_TITULO_LINHA2   = "INTERIF"                       # linha menor no cabeçalho
+PLACA_DATA_EVENTO     = "Fase Local, 20 de Junho de 2026"
+PLACA_FONTE_TITULO    = "DK Bocadillo.ttf"              # fonte decorativa do cabeçalho
+PLACA_FONTE_NOME      = "AccanthisADFStd-Regular.ttf"   # campus (linha fina)
+PLACA_FONTE_NOME_BOLD = "AccanthisADFStdNo3-Bold.ttf"   # nome da equipe (negrito)
+PLACA_SUBJECT         = f"Placas das equipes — {TITULO_EVENTO}"
+PLACA_BODY_TEMPLATE   = (
+    "Olá, {nome}!\n\n"
+    "Seguem em anexo as placas de identificação das equipes do campus {campus} "
+    f"para o {TITULO_EVENTO}.\n\n"
+    f"Atenciosamente,\nOrganização {TITULO_EVENTO}"
+)

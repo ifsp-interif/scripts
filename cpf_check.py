@@ -18,24 +18,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import cpf as cpflib
-from rich import box
-from rich.console import Console
-from rich.panel import Panel
-from rich.table import Table
-from rich.text import Text
+from tabulate import tabulate
+
+from config import EMAIL_INTERIF as INTERIF_EMAIL
+from config import NOTIFY_BODY, NOTIFY_SUBJECT
 
 CSV_FILE = Path(__file__).parent / "equipes_interif.csv"
-
-INTERIF_EMAIL   = "interif@ifsp.edu.br"
-NOTIFY_SUBJECT  = "Atualização de CPF — IX InterIF"
-NOTIFY_BODY     = (
-    "Olá, {nome}!\n\n"
-    "Identificamos que o CPF {cpf} registrado para você no IX InterIF é inválido.\n\n"
-    "Por favor, envie seu CPF correto para {interif_email} o mais breve possível "
-    "para garantir sua participação no evento.\n\n"
-    "Atenciosamente,\n"
-    "Organização IX InterIF"
-)
 
 # Mapeamento: coluna de CPF → (coluna de nome, coluna de email, papel)
 _CPF_COL_MAP: dict[str, tuple[str, str, str]] = {
@@ -51,9 +39,6 @@ _CPF_COL_MAP: dict[str, tuple[str, str, str]] = {
 
 # Fallback: regex para detectar CPFs em qualquer campo
 _CPF_RE = re.compile(r"\b(\d{3}[.\-]?\d{3}[.\-]?\d{3}[.\-]?\d{2})\b")
-
-console = Console()
-
 
 # ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -208,7 +193,7 @@ def notify_invalid(entries: list[CpfEntry], dry_run: bool) -> None:
     sem_email = [e for e in invalids if not e.email]
     com_email  = [e for e in invalids if e.email]
 
-    console.print(f"\n[bold]Notificações de CPF inválido[/bold] ({len(invalids)} entrada(s)):\n")
+    print(f"\nNotificações de CPF inválido ({len(invalids)} entrada(s)):\n")
 
     for entry in com_email:
         body = NOTIFY_BODY.format(
@@ -222,6 +207,14 @@ def notify_invalid(entries: list[CpfEntry], dry_run: bool) -> None:
         )
         cc_str = ",".join(cc_list)
 
+        dest = f"{entry.email} (cc: {cc_str})"
+        if dry_run:
+            print(f"  -> Para: {dest}")
+            print(f"     Assunto: {NOTIFY_SUBJECT}")
+            print(body)
+            continue
+
+        print(f"  -> Enviando para {dest} ...")
         cmd = [
             "gws", "gmail", "+send",
             "--to",      entry.email,
@@ -229,54 +222,23 @@ def notify_invalid(entries: list[CpfEntry], dry_run: bool) -> None:
             "--subject", NOTIFY_SUBJECT,
             "--body",    body,
         ]
-        if dry_run:
-            cmd.append("--dry-run")
-
-        prefix = "[dim][dry-run][/dim] " if dry_run else ""
-        console.print(f"  {prefix}→ Enviando para [bold]{entry.email}[/bold] (cc: {cc_str}) …")
         try:
             subprocess.run(cmd, check=True)
-            console.print(f"    [green]✔ enviado[/green]")
+            print("    OK: enviado")
         except subprocess.CalledProcessError as exc:
-            console.print(f"    [red]✘ erro ao enviar: {exc}[/red]")
+            print(f"    Erro ao enviar: {exc}")
 
     if sem_email:
-        console.print()
-        console.print("[yellow]⚠ As seguintes entradas não possuem email e não foram notificadas:[/yellow]")
+        print()
+        print("Aviso: as seguintes entradas não possuem email e não foram notificadas:")
         for e in sem_email:
-            console.print(f"  • {e.nome} ({e.campus}) — CPF {e.cpf_fmt}")
+            print(f"  - {e.nome} ({e.campus}) — CPF {e.cpf_fmt}")
 
 
 # ── Exibição ──────────────────────────────────────────────────────────────────
 
-def _papel_text(papel: str) -> Text:
-    if papel == "Coach":
-        return Text("Coach", style="bold yellow")
-    if papel == "Aluno":
-        return Text("Aluno", style="cyan")
-    return Text(papel)
-
-
-def _situacao_text(entry: CpfEntry) -> Text:
-    if entry.valido:
-        return Text("✔  VÁLIDO", style="bold green")
-    return Text("✘  INVÁLIDO", style="bold red")
-
-
 def render_table(entries: list[CpfEntry]) -> None:
-    table = Table(
-        show_header=True,
-        header_style="bold magenta",
-        box=box.ROUNDED,
-        show_lines=False,
-        expand=True,
-    )
-    table.add_column("Campus",   style="bold", min_width=20)
-    table.add_column("Pessoa",   min_width=35)
-    table.add_column("Papel",    min_width=7,  justify="center")
-    table.add_column("CPF",      min_width=15, justify="center")
-    table.add_column("Situação", min_width=12, justify="center")
-
+    rows: list[list[str]] = []
     prev_campus = None
     for e in entries:
         campus_cell = ""
@@ -284,15 +246,9 @@ def render_table(entries: list[CpfEntry]) -> None:
             campus_cell = e.campus
             prev_campus = e.campus
 
-        table.add_row(
-            campus_cell,
-            e.nome,
-            _papel_text(e.papel),
-            e.cpf_fmt,
-            _situacao_text(e),
-        )
+        rows.append([campus_cell, e.nome, e.papel, e.cpf_fmt, e.situacao])
 
-    console.print(table)
+    print(tabulate(rows, headers=["Campus", "Pessoa", "Papel", "CPF", "Situação"], tablefmt="simple"))
 
 
 def render_summary(entries: list[CpfEntry]) -> None:
@@ -300,14 +256,15 @@ def render_summary(entries: list[CpfEntry]) -> None:
     validos   = sum(1 for e in entries if e.valido)
     invalidos = total - validos
 
-    t = Table(show_header=False, box=box.SIMPLE, padding=(0, 2))
-    t.add_column(style="bold")
-    t.add_column(justify="right")
-    t.add_row("Total de CPFs", str(total))
-    t.add_row("Válidos",       Text(str(validos),   style="bold green"))
-    t.add_row("Inválidos",     Text(str(invalidos), style="bold red"))
-
-    console.print(Panel(t, title="[bold cyan]Resumo[/bold cyan]", border_style="cyan"))
+    print("Resumo")
+    print(tabulate(
+        [
+            ["Total de CPFs", total],
+            ["Válidos", validos],
+            ["Inválidos", invalidos],
+        ],
+        tablefmt="simple",
+    ))
 
 
 # ── Exportação CSV ────────────────────────────────────────────────────────────
@@ -318,7 +275,7 @@ def export_csv(entries: list[CpfEntry], dest: Path) -> None:
         writer.writerow(["Campus", "Pessoa", "Papel", "CPF", "Situação"])
         for e in entries:
             writer.writerow([e.campus, e.nome, e.papel, e.cpf_fmt, e.situacao])
-    console.print(f"\n[dim]Exportado para [bold]{dest}[/bold] ({len(entries)} linhas).[/dim]")
+    print(f"\nExportado para {dest} ({len(entries)} linhas).")
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
@@ -365,17 +322,12 @@ def main() -> None:
     csv_path = Path(args.csv_file)
 
     if not csv_path.exists():
-        console.print(f"[bold red]Erro:[/bold red] arquivo não encontrado: {csv_path}")
+        print(f"Erro: arquivo não encontrado: {csv_path}", file=sys.stderr)
         sys.exit(1)
 
-    console.print(
-        Panel(
-            f"Arquivo: [bold]{csv_path.resolve()}[/bold]",
-            title="[bold cyan]Validador de CPF — InterIF[/bold cyan]",
-            border_style="cyan",
-        )
-    )
-    console.print()
+    print("Validador de CPF - InterIF")
+    print(f"Arquivo: {csv_path.resolve()}")
+    print()
 
     headers, rows = load_rows(csv_path)
     entries, used_map = build_entries(headers, rows)
@@ -385,27 +337,23 @@ def main() -> None:
         if used_map
         else "varredura regex (nenhuma coluna CPF encontrada)"
     )
-    filtro = " · [bold yellow]filtro: apenas inválidos[/bold yellow]" if args.invalidos else ""
-    console.print(
-        f"[dim]{len(rows)} equipe(s) carregada(s) · modo: {modo} · "
-        f"{len(entries)} CPF(s) encontrado(s).{filtro}[/dim]\n"
+    filtro = " · filtro: apenas inválidos" if args.invalidos else ""
+    print(
+        f"{len(rows)} equipe(s) carregada(s) · modo: {modo} · "
+        f"{len(entries)} CPF(s) encontrado(s).{filtro}\n"
     )
 
     if not entries:
-        console.print(
-            Panel(
-                "[yellow]Nenhum CPF encontrado no arquivo.[/yellow]\n"
-                'Certifique-se de que o cabeçalho contém a palavra "CPF"\n'
-                "ou que os campos contêm sequências de 11 dígitos.",
-                title="[bold yellow]⚠ Aviso[/bold yellow]",
-                border_style="yellow",
-            )
+        print(
+            "Aviso: nenhum CPF encontrado no arquivo.\n"
+            'Certifique-se de que o cabeçalho contém a palavra "CPF"\n'
+            "ou que os campos contêm sequências de 11 dígitos."
         )
         return
 
     display_entries = [e for e in entries if not e.valido] if args.invalidos else entries
     render_table(display_entries)
-    console.print()
+    print()
     render_summary(display_entries)
 
     if args.output:

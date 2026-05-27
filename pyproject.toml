@@ -5,32 +5,53 @@ build-backend = "hatchling.build"
 [project]
 name = "interif-scripts"
 version = "0.1.0"
-description = "Scripts de apoio à organização do InterIF (geração de CSV, envio de e-mails e validação de CPFs)"
+description = "Scripts de apoio à organização do InterIF (geração de CSV, envio de e-mails, validação de CPFs e geração de arquivos BOCA)"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
 authors = [{ name = "Daniel Correa Lobato", email = "correalobatodaniel@gmail.com" }]
 
 dependencies = [
-    # cpf_check.py
     "cpf>=3.0",
-    "rich>=13.0",
+    "ruff>=0.4",
+    # gerar_etiquetas.py
+    "reportlab>=4.0",
+    "pillow>=10.0",
+    # lista_equipes_especiais.py
+    "tabulate>=0.9",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "ruff>=0.4",
     "pytest>=8.0",
 ]
 
 [project.scripts]
-interif-gerar-csv  = "equipes_interif:main"   # python equipes_interif.py
-interif-emails     = "send_emails:main"        # python send_emails.py
-interif-cpf        = "cpf_check:main"          # python cpf_check.py
+interif-gerar-csv    = "equipes_interif:main"        # python equipes_interif.py
+interif-inscricoes   = "inscricoes_atuais:main"        # python inscricoes_atuais.py
+interif-cpf          = "cpf_check:main"               # python cpf_check.py
+interif-boca         = "gerar_arquivos_boca:main"     # python gerar_arquivos_boca.py
+interif-credenciais  = "enviar_credenciais:main"      # python enviar_credenciais.py
+interif-camisetas    = "total_camisetas:main"          # python total_camisetas.py
+interif-etiquetas    = "gerar_etiquetas:main"             # python gerar_etiquetas.py
+interif-placas       = "gerar_placas:main"                # python gerar_placas.py
+interif-equipes-especiais = "lista_equipes_especiais:main" # python lista_equipes_especiais.py
 
 # ── Hatchling: inclui os scripts avulsos (sem __init__.py) ───────────────────
 [tool.hatch.build.targets.wheel]
-packages = ["equipes_interif.py", "send_emails.py", "cpf_check.py"]
+packages = [
+    "config.py",
+    "interif_core.py",
+    "equipes_interif.py",
+    "inscricoes_atuais.py",
+    "cpf_check.py",
+    "gerar_arquivos_boca.py",
+    "enviar_credenciais.py",
+    "total_camisetas.py",
+    "gerar_etiquetas.py",
+    "gerar_placas.py",
+    "lista_equipes_especiais.py",
+]
 
 # ── Ruff (linter / formatter) ────────────────────────────────────────────────
 [tool.ruff]
