@@ -42,14 +42,15 @@ _CPF_RE = re.compile(r"\b(\d{3}[.\-]?\d{3}[.\-]?\d{3}[.\-]?\d{2})\b")
 
 # ── Tipos ─────────────────────────────────────────────────────────────────────
 
+
 @dataclass
 class CpfEntry:
-    campus:      str
-    nome:        str
-    email:       str   # endereço da pessoa; pode ser vazio no fallback regex
-    papel:       str   # "Coach" ou "Aluno"
-    cpf:         str   # dígitos brutos (11 chars)
-    valido:      bool
+    campus: str
+    nome: str
+    email: str  # endereço da pessoa; pode ser vazio no fallback regex
+    papel: str  # "Coach" ou "Aluno"
+    cpf: str  # dígitos brutos (11 chars)
+    valido: bool
     coord_email: str = field(default="")  # coordenador local do campus
 
     @property
@@ -70,6 +71,7 @@ class CpfEntry:
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 def _digits(value: str) -> str:
     """Extrai apenas os dígitos de um CPF."""
     return re.sub(r"\D", "", value.strip())
@@ -84,6 +86,7 @@ def _validate(raw: str) -> bool:
 
 # ── Leitura do CSV ────────────────────────────────────────────────────────────
 
+
 def load_rows(csv_path: Path) -> tuple[list[str], list[dict]]:
     with open(csv_path, newline="", encoding="utf-8-sig") as f:
         reader = csv.DictReader(f)
@@ -93,6 +96,7 @@ def load_rows(csv_path: Path) -> tuple[list[str], list[dict]]:
 
 
 # ── Extração de entradas de CPF ───────────────────────────────────────────────
+
 
 def _extract_mapped(row: dict, present_cpf_cols: list[str]) -> list[CpfEntry]:
     """Extrai CPFs usando o mapeamento coluna → nome + email + papel."""
@@ -113,18 +117,20 @@ def _extract_mapped(row: dict, present_cpf_cols: list[str]) -> list[CpfEntry]:
         if len(digits) != 11:
             continue
 
-        nome        = row.get(nome_col,  "—").strip() or "—"
-        email       = row.get(email_col, "").strip().lower()
+        nome = row.get(nome_col, "—").strip() or "—"
+        email = row.get(email_col, "").strip().lower()
         coord_email = row.get("Email do Coordenador do Campus", "").strip().lower()
-        entries.append(CpfEntry(
-            campus=campus,
-            nome=nome,
-            email=email,
-            papel=papel,
-            cpf=digits,
-            valido=_validate(digits),
-            coord_email=coord_email,
-        ))
+        entries.append(
+            CpfEntry(
+                campus=campus,
+                nome=nome,
+                email=email,
+                papel=papel,
+                cpf=digits,
+                valido=_validate(digits),
+                coord_email=coord_email,
+            )
+        )
     return entries
 
 
@@ -140,14 +146,16 @@ def _extract_regex(row: dict) -> list[CpfEntry]:
             digits = _digits(match.group(1))
             if len(digits) != 11:
                 continue
-            entries.append(CpfEntry(
-                campus=campus,
-                nome=col,   # sem nome real disponível, usa o nome da coluna
-                email="",
-                papel="—",
-                cpf=digits,
-                valido=_validate(digits),
-            ))
+            entries.append(
+                CpfEntry(
+                    campus=campus,
+                    nome=col,  # sem nome real disponível, usa o nome da coluna
+                    email="",
+                    papel="—",
+                    cpf=digits,
+                    valido=_validate(digits),
+                )
+            )
     return entries
 
 
@@ -168,11 +176,13 @@ def build_entries(headers: list[str], rows: list[dict]) -> tuple[list[CpfEntry],
             all_entries.extend(_extract_regex(row))
 
     papel_order = {"Coach": 0, "Aluno": 1}
-    all_entries.sort(key=lambda e: (
-        e.campus.lower(),
-        papel_order.get(e.papel, 9),
-        e.nome.lower(),
-    ))
+    all_entries.sort(
+        key=lambda e: (
+            e.campus.lower(),
+            papel_order.get(e.papel, 9),
+            e.nome.lower(),
+        )
+    )
 
     seen: set[str] = set()
     unique: list[CpfEntry] = []
@@ -186,12 +196,13 @@ def build_entries(headers: list[str], rows: list[dict]) -> tuple[list[CpfEntry],
 
 # ── Envio de notificações ─────────────────────────────────────────────────────
 
+
 def notify_invalid(entries: list[CpfEntry], dry_run: bool) -> None:
     """Envia email para cada pessoa com CPF inválido que tenha endereço disponível."""
     invalids = [e for e in entries if not e.valido]
 
     sem_email = [e for e in invalids if not e.email]
-    com_email  = [e for e in invalids if e.email]
+    com_email = [e for e in invalids if e.email]
 
     print(f"\nNotificações de CPF inválido ({len(invalids)} entrada(s)):\n")
 
@@ -202,9 +213,7 @@ def notify_invalid(entries: list[CpfEntry], dry_run: bool) -> None:
             interif_email=INTERIF_EMAIL,
         )
         # Monta lista de CCs sem duplicatas, preservando a ordem
-        cc_list = dict.fromkeys(
-            e for e in [INTERIF_EMAIL, entry.coord_email] if e
-        )
+        cc_list = dict.fromkeys(e for e in [INTERIF_EMAIL, entry.coord_email] if e)
         cc_str = ",".join(cc_list)
 
         dest = f"{entry.email} (cc: {cc_str})"
@@ -216,11 +225,17 @@ def notify_invalid(entries: list[CpfEntry], dry_run: bool) -> None:
 
         print(f"  -> Enviando para {dest} ...")
         cmd = [
-            "gws", "gmail", "+send",
-            "--to",      entry.email,
-            "--cc",      cc_str,
-            "--subject", NOTIFY_SUBJECT,
-            "--body",    body,
+            "gws",
+            "gmail",
+            "+send",
+            "--to",
+            entry.email,
+            "--cc",
+            cc_str,
+            "--subject",
+            NOTIFY_SUBJECT,
+            "--body",
+            body,
         ]
         try:
             subprocess.run(cmd, check=True)
@@ -237,6 +252,7 @@ def notify_invalid(entries: list[CpfEntry], dry_run: bool) -> None:
 
 # ── Exibição ──────────────────────────────────────────────────────────────────
 
+
 def render_table(entries: list[CpfEntry]) -> None:
     rows: list[list[str]] = []
     prev_campus = None
@@ -248,26 +264,31 @@ def render_table(entries: list[CpfEntry]) -> None:
 
         rows.append([campus_cell, e.nome, e.papel, e.cpf_fmt, e.situacao])
 
-    print(tabulate(rows, headers=["Campus", "Pessoa", "Papel", "CPF", "Situação"], tablefmt="simple"))
+    print(
+        tabulate(rows, headers=["Campus", "Pessoa", "Papel", "CPF", "Situação"], tablefmt="simple")
+    )
 
 
 def render_summary(entries: list[CpfEntry]) -> None:
-    total     = len(entries)
-    validos   = sum(1 for e in entries if e.valido)
+    total = len(entries)
+    validos = sum(1 for e in entries if e.valido)
     invalidos = total - validos
 
     print("Resumo")
-    print(tabulate(
-        [
-            ["Total de CPFs", total],
-            ["Válidos", validos],
-            ["Inválidos", invalidos],
-        ],
-        tablefmt="simple",
-    ))
+    print(
+        tabulate(
+            [
+                ["Total de CPFs", total],
+                ["Válidos", validos],
+                ["Inválidos", invalidos],
+            ],
+            tablefmt="simple",
+        )
+    )
 
 
 # ── Exportação CSV ────────────────────────────────────────────────────────────
+
 
 def export_csv(entries: list[CpfEntry], dest: Path) -> None:
     with open(dest, "w", newline="", encoding="utf-8") as f:
@@ -279,6 +300,7 @@ def export_csv(entries: list[CpfEntry], dest: Path) -> None:
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -292,16 +314,17 @@ def parse_args() -> argparse.Namespace:
         help=f"Caminho do CSV de entrada (padrão: {CSV_FILE.name})",
     )
     parser.add_argument(
-        "--invalidos", "-i",
+        "--invalidos",
+        "-i",
         action="store_true",
         help="Exibe apenas os CPFs inválidos",
     )
     parser.add_argument(
-        "--notificar", "-n",
+        "--notificar",
+        "-n",
         action="store_true",
         help=(
-            "Envia email para cada pessoa com CPF inválido pedindo correção "
-            f"(cc: {INTERIF_EMAIL})"
+            f"Envia email para cada pessoa com CPF inválido pedindo correção (cc: {INTERIF_EMAIL})"
         ),
     )
     parser.add_argument(
@@ -310,7 +333,8 @@ def parse_args() -> argparse.Namespace:
         help="Mostra um preview dos emails no terminal sem chamar o gws",
     )
     parser.add_argument(
-        "--output", "-o",
+        "--output",
+        "-o",
         metavar="SAIDA.csv",
         help="Exporta o resultado também como arquivo CSV",
     )

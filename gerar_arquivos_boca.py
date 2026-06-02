@@ -38,6 +38,7 @@ from interif_core import (
 
 # ── Construtores de conteúdo ──────────────────────────────────────────────────
 
+
 def build_usuarios(
     credenciais: list[CredencialEquipe],
     info_campus: list[dict],
@@ -54,11 +55,11 @@ def build_usuarios(
         cred_por_campus.setdefault(cred.campus, []).append(cred)
 
     for bloco_idx, info in enumerate(info_campus):
-        campus  = info["campus"]
+        campus = info["campus"]
         prefixo = info["prefixo"]
         usernumber_base = blocos[bloco_idx]
         equipes = cred_por_campus[campus]
-        label   = equipes[0].label   # sigla ou nome completo conforme --sigla
+        label = equipes[0].label  # sigla ou nome completo conforme --sigla
 
         for n, cred in enumerate(equipes, start=1):
             usernumber = usernumber_base + n - 1
@@ -140,10 +141,7 @@ def build_score(info_campus: list[dict]) -> str:
     geral_fim = info_campus[-1]["bloco_fim"] if info_campus else geral_inicio
 
     linhas: list[str] = []
-    linhas.append(
-        f"GERAL {geral_inicio}/{geral_fim}/1 "
-        "# /^team/ /^score/ /^judge/ /^admin/\n"
-    )
+    linhas.append(f"GERAL {geral_inicio}/{geral_fim}/1 # /^team/ /^score/ /^judge/ /^admin/\n")
 
     for info in info_campus:
         prefixo = info["prefixo"]
@@ -174,6 +172,7 @@ def build_secrets(info_campus: list[dict]) -> str:
 
 # ── Exibição ──────────────────────────────────────────────────────────────────
 
+
 def render_table(info_campus: list[dict]) -> None:
     rows = [
         [
@@ -184,7 +183,11 @@ def render_table(info_campus: list[dict]) -> None:
         ]
         for info in info_campus
     ]
-    print(tabulate(rows, headers=["Campus", "Sigla", "Nº Equipes", "Bloco usernumber"], tablefmt="simple"))
+    print(
+        tabulate(
+            rows, headers=["Campus", "Sigla", "Nº Equipes", "Bloco usernumber"], tablefmt="simple"
+        )
+    )
 
 
 def render_summary(
@@ -193,7 +196,7 @@ def render_summary(
     dry_run: bool,
 ) -> None:
     n_equipes = sum(i["n_equipes"] for i in info_campus)
-    n_campus  = len(info_campus)
+    n_campus = len(info_campus)
 
     rows: list[list[str | int]] = [
         ["Equipes", n_equipes],
@@ -212,6 +215,7 @@ def render_summary(
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
@@ -228,19 +232,22 @@ def parse_args() -> argparse.Namespace:
         help=f"Caminho do CSV de equipes (padrão: {CSV_FILE.name})",
     )
     parser.add_argument(
-        "-u", "--user-output",
+        "-u",
+        "--user-output",
         default="usuarios.txt",
         metavar="ARQUIVO",
         help="Arquivo de saída de usuários (padrão: usuarios.txt)",
     )
     parser.add_argument(
-        "-a", "--animator",
+        "-a",
+        "--animator",
         default="INTERIF.toml",
         metavar="ARQUIVO",
         help="Arquivo de saída do animator (padrão: INTERIF.toml)",
     )
     parser.add_argument(
-        "-s", "--score",
+        "-s",
+        "--score",
         default="score.sep",
         metavar="ARQUIVO",
         help="Arquivo de saída do score (padrão: score.sep)",
@@ -252,7 +259,8 @@ def parse_args() -> argparse.Namespace:
         help="Arquivo de saída de segredos (padrão: secret_interif.toml)",
     )
     parser.add_argument(
-        "-o", "--output",
+        "-o",
+        "--output",
         default="output",
         metavar="DIR",
         help="Diretório de saída (padrão: output/); criado automaticamente se não existir",
@@ -281,7 +289,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    csv_path   = Path(args.csv_file)
+    csv_path = Path(args.csv_file)
     campi_path = Path(args.campi)
     output_dir = Path(args.output)
     ano = datetime.now().year
@@ -314,9 +322,9 @@ def main() -> None:
     credenciais, info_campus = gerar_credenciais(teams, campi, usar_sigla=args.sigla)
 
     usuarios_txt = build_usuarios(credenciais, info_campus, ano)
-    toml_txt     = build_toml(info_campus)
-    score_txt    = build_score(info_campus)
-    secrets_txt  = build_secrets(info_campus)
+    toml_txt = build_toml(info_campus)
+    score_txt = build_score(info_campus)
+    secrets_txt = build_secrets(info_campus)
 
     render_table(info_campus)
     print()
@@ -324,16 +332,16 @@ def main() -> None:
     destinos = {
         "Usuários": str(output_dir / args.user_output),
         "Animator": str(output_dir / args.animator),
-        "Score":    str(output_dir / args.score),
-        "Secrets":  str(output_dir / args.secrets),
+        "Score": str(output_dir / args.score),
+        "Secrets": str(output_dir / args.secrets),
     }
 
     if args.dry_run:
         _sep = "─" * 60
         for label, conteudo in [
-            ("usuarios.txt",        usuarios_txt),
-            ("INTERIF.toml",        toml_txt),
-            ("score.sep",           score_txt),
+            ("usuarios.txt", usuarios_txt),
+            ("INTERIF.toml", toml_txt),
+            ("score.sep", score_txt),
             ("secret_interif.toml", secrets_txt),
         ]:
             print(_sep)
@@ -344,9 +352,9 @@ def main() -> None:
         output_dir.mkdir(parents=True, exist_ok=True)
         saidas = [
             (output_dir / args.user_output, usuarios_txt),
-            (output_dir / args.animator,    toml_txt),
-            (output_dir / args.score,       score_txt),
-            (output_dir / args.secrets,     secrets_txt),
+            (output_dir / args.animator, toml_txt),
+            (output_dir / args.score, score_txt),
+            (output_dir / args.secrets, secrets_txt),
         ]
         for caminho, conteudo in saidas:
             caminho.write_text(conteudo, encoding="utf-8", newline="\n")

@@ -62,10 +62,7 @@ def _build_cpf_shirt_pairs(headers: list[str]) -> list[tuple[int, int]]:
     Retorna lista de (índice_cpf, índice_camiseta).
     Se nenhum par for encontrado, retorna lista vazia (fallback sem deduplicação).
     """
-    shirt_indices = [
-        i for i, h in enumerate(headers)
-        if h.strip().lower() == "tamanho da camiseta"
-    ]
+    shirt_indices = [i for i, h in enumerate(headers) if h.strip().lower() == "tamanho da camiseta"]
 
     pairs: list[tuple[int, int]] = []
     used_shirt: set[int] = set()
@@ -224,17 +221,21 @@ def build_terminal_table(totals: ShirtTotals) -> str:
     for campus in sorted(totals.by_campus):
         campus_counts = totals.by_campus[campus]
         row_total = sum(campus_counts.values())
-        rows.append([
-            campus,
-            *(campus_counts.get(size, 0) for size in sizes),
-            row_total,
-        ])
+        rows.append(
+            [
+                campus,
+                *(campus_counts.get(size, 0) for size in sizes),
+                row_total,
+            ]
+        )
 
-    rows.append([
-        "Total",
-        *(totals.total.get(size, 0) for size in sizes),
-        sum(totals.total.values()),
-    ])
+    rows.append(
+        [
+            "Total",
+            *(totals.total.get(size, 0) for size in sizes),
+            sum(totals.total.values()),
+        ]
+    )
     return tabulate(rows, headers=headers, tablefmt="simple")
 
 
@@ -252,17 +253,21 @@ def render_markdown(totals: ShirtTotals) -> str:
     for campus in sorted(totals.by_campus):
         campus_counts = totals.by_campus[campus]
         row_total = sum(campus_counts.values())
-        rows.append([
-            campus,
-            *(campus_counts.get(size, 0) for size in sizes),
-            row_total,
-        ])
+        rows.append(
+            [
+                campus,
+                *(campus_counts.get(size, 0) for size in sizes),
+                row_total,
+            ]
+        )
 
-    rows.append([
-        "Total",
-        *(totals.total.get(size, 0) for size in sizes),
-        sum(totals.total.values()),
-    ])
+    rows.append(
+        [
+            "Total",
+            *(totals.total.get(size, 0) for size in sizes),
+            sum(totals.total.values()),
+        ]
+    )
     lines.extend(tabulate(rows, headers=headers, tablefmt="github").splitlines())
 
     if totals.total_no_shirt:
@@ -290,9 +295,13 @@ def main() -> None:
     print("Camisetas por campus")
     print(build_terminal_table(totals))
     if totals.total_no_shirt:
-        print(f"\nSolicitações sem camiseta ignoradas no total por tamanho: {totals.total_no_shirt}")
+        print(
+            f"\nSolicitações sem camiseta ignoradas no total por tamanho: {totals.total_no_shirt}"
+        )
     if totals.duplicates_skipped:
-        print(f"Entradas ignoradas por CPF duplicado (mesma pessoa em múltiplas equipes): {totals.duplicates_skipped}")
+        print(
+            f"Entradas ignoradas por CPF duplicado (mesma pessoa em múltiplas equipes): {totals.duplicates_skipped}"
+        )
 
     if args.output:
         output_path = Path(args.output)

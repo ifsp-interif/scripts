@@ -22,17 +22,17 @@ COORD_OUTPUT_FILE = Path(__file__).parent / "coordenadores_interif.csv"
 # ── Column layout of the *teams* sheet (0-based, header row excluded) ─────────
 # Adjust these constants if the spreadsheet columns are ever reordered.
 
-CAMPUS_COL    = 3   # Campus
-TEAM_NAME_COL = 2   # Nome da Equipe
+CAMPUS_COL = 3  # Campus
+TEAM_NAME_COL = 2  # Nome da Equipe
 
 # Key columns that are renamed to canonical names used by downstream scripts.
 # All other columns are kept with their original spreadsheet header.
 TEAM_KEY_COLUMNS: dict[int, str] = {
-    2:  "Nome da Equipe",
-    3:  "Campus",
-    6:  "Nome do Responsável pela Equipe",
-    7:  "CPF do Responsável pela Equipe",
-    8:  "Email do Responsável pela Equipe",
+    2: "Nome da Equipe",
+    3: "Campus",
+    6: "Nome do Responsável pela Equipe",
+    7: "CPF do Responsável pela Equipe",
+    8: "Email do Responsável pela Equipe",
     11: "Nome Participante 1",
     13: "CPF Participante 1",
     14: "Email Participante 1",
@@ -45,10 +45,11 @@ TEAM_KEY_COLUMNS: dict[int, str] = {
 }
 
 # Coordinator columns are inserted at this position (right after Campus).
-_COORD_INSERT_POS = CAMPUS_COL + 1   # → index 4 in the output
+_COORD_INSERT_POS = CAMPUS_COL + 1  # → index 4 in the output
 
 
 # ── I/O helpers ───────────────────────────────────────────────────────────────
+
 
 def read_sheet(spreadsheet_id: str, sheet_name: str) -> tuple[list[str], list[list[str]]]:
     result = subprocess.run(
@@ -77,20 +78,28 @@ def parse_args() -> argparse.Namespace:
         description="Gera equipes_interif.csv a partir de duas planilhas Google Sheets."
     )
     parser.add_argument(
-        "--campi", required=True, metavar="SHEET_ID",
+        "--campi",
+        required=True,
+        metavar="SHEET_ID",
         help="ID da planilha de inscrição de campi",
     )
     parser.add_argument(
-        "--teams", required=True, metavar="SHEET_ID",
+        "--teams",
+        required=True,
+        metavar="SHEET_ID",
         help="ID da planilha de inscrição de equipes",
     )
     parser.add_argument(
-        "--output", "-o", metavar="ARQUIVO",
+        "--output",
+        "-o",
+        metavar="ARQUIVO",
         default=str(OUTPUT_FILE),
         help=f"Caminho do CSV de saída (padrão: {OUTPUT_FILE.name})",
     )
     parser.add_argument(
-        "--coordenadores", "-c", metavar="ARQUIVO",
+        "--coordenadores",
+        "-c",
+        metavar="ARQUIVO",
         default=str(COORD_OUTPUT_FILE),
         help=f"Caminho do CSV de coordenadores (padrão: {COORD_OUTPUT_FILE.name})",
     )
@@ -98,6 +107,7 @@ def parse_args() -> argparse.Namespace:
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
+
 
 def main() -> None:
     args = parse_args()
@@ -124,19 +134,18 @@ def main() -> None:
     ]
     with open(coord_output_path, "w", newline="", encoding="utf-8-sig") as f:
         writer = csv.writer(f)
-        writer.writerow([
-            "Campus",
-            "Nome do Coordenador do Campus",
-            "Email do Coordenador do Campus",
-        ])
+        writer.writerow(
+            [
+                "Campus",
+                "Nome do Coordenador do Campus",
+                "Email do Coordenador do Campus",
+            ]
+        )
         writer.writerows(coord_rows)
 
     # Output headers: rename key columns; keep all others with original names.
     # Then splice coordinator columns in right after Campus.
-    renamed: list[str] = [
-        TEAM_KEY_COLUMNS.get(i, h)
-        for i, h in enumerate(team_headers)
-    ]
+    renamed: list[str] = [TEAM_KEY_COLUMNS.get(i, h) for i, h in enumerate(team_headers)]
     output_headers: list[str] = (
         renamed[:_COORD_INSERT_POS]
         + ["Nome do Coordenador do Campus", "Email do Coordenador do Campus"]
@@ -154,17 +163,11 @@ def main() -> None:
         _, coord_nome, coord_email = coord_map.get(campus.lower(), ("", "", ""))
 
         values = [get(row, i) for i in range(len(team_headers))]
-        values = (
-            values[:_COORD_INSERT_POS]
-            + [coord_nome, coord_email]
-            + values[_COORD_INSERT_POS:]
-        )
+        values = values[:_COORD_INSERT_POS] + [coord_nome, coord_email] + values[_COORD_INSERT_POS:]
         result_rows.append(values)
 
     # Sort by campus, then team name (case-insensitive)
-    result_rows.sort(
-        key=lambda r: (r[CAMPUS_COL].lower(), r[TEAM_NAME_COL].lower())
-    )
+    result_rows.sort(key=lambda r: (r[CAMPUS_COL].lower(), r[TEAM_NAME_COL].lower()))
 
     output_path = Path(args.output)
     with open(output_path, "w", newline="", encoding="utf-8-sig") as f:

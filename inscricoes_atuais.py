@@ -3,7 +3,6 @@
 
 import argparse
 import csv
-import subprocess
 from collections import defaultdict
 from datetime import datetime
 
@@ -23,12 +22,12 @@ from config import (
 from config import (
     EMAIL_INTERIF as SUMMARY_TO,
 )
+from email_utils import send_email
 
 # ── Configuração local ────────────────────────────────────────────────────────
 
 CSV_FILE = "equipes_interif.csv"
 COORD_CSV_FILE = "coordenadores_interif.csv"
-DRY_RUN = False   # True → não envia emails de verdade
 
 _now = datetime.now()
 _TIMESTAMP = _now.strftime("até %Y-%m-%d %Hh%Mmin")
@@ -36,32 +35,6 @@ _TIMESTAMP = _now.strftime("até %Y-%m-%d %Hh%Mmin")
 
 def first_name(full_name: str) -> str:
     return full_name.strip().split()[0] if full_name.strip() else full_name
-
-
-def send_email(to: str, subject: str, body: str) -> None:
-    if DRY_RUN:
-        print(f"\n--- DRY-RUN: email para {to} ---")
-        print(f"Assunto: {subject}")
-        print()
-        print(body)
-        print("--- fim do email ---")
-        return
-
-    cmd = ["gws", "gmail", "+send", "--to", to, "--subject", subject, "--body", body]
-    print(f"  → Enviando para {to} ...")
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-    except subprocess.CalledProcessError as exc:
-        print("    ERRO: envio falhou")
-        if exc.stdout:
-            print(exc.stdout.strip())
-        if exc.stderr:
-            print(exc.stderr.strip())
-        raise
-
-    print("    OK: enviado")
-    if result.stdout.strip():
-        print(result.stdout.strip())
 
 
 def normalize_campus(campus: str) -> str:
@@ -80,15 +53,17 @@ def load_teams(csv_file: str) -> list[dict]:
                 for col in ("Nome Participante 1", "Nome Participante 2", "Nome Participante 3")
                 if row.get(col, "").strip()
             ]
-            teams.append({
-                "equipe":        row["Nome da Equipe"].strip(),
-                "campus":        row["Campus"].strip(),
-                "coord_nome":    row["Nome do Coordenador do Campus"].strip(),
-                "coord_email":   row["Email do Coordenador do Campus"].strip().lower(),
-                "resp_nome":     row["Nome do Responsável pela Equipe"].strip(),
-                "resp_email":    row["Email do Responsável pela Equipe"].strip().lower(),
-                "participantes": participants,
-            })
+            teams.append(
+                {
+                    "equipe": row["Nome da Equipe"].strip(),
+                    "campus": row["Campus"].strip(),
+                    "coord_nome": row["Nome do Coordenador do Campus"].strip(),
+                    "coord_email": row["Email do Coordenador do Campus"].strip().lower(),
+                    "resp_nome": row["Nome do Responsável pela Equipe"].strip(),
+                    "resp_email": row["Email do Responsável pela Equipe"].strip().lower(),
+                    "participantes": participants,
+                }
+            )
     return teams
 
 
@@ -100,11 +75,13 @@ def load_coordinators(csv_file: str) -> list[dict]:
             campus = row.get("Campus", "").strip()
             if not campus:
                 continue
-            coordinators.append({
-                "campus": campus,
-                "coord_nome": row.get("Nome do Coordenador do Campus", "").strip(),
-                "coord_email": row.get("Email do Coordenador do Campus", "").strip().lower(),
-            })
+            coordinators.append(
+                {
+                    "campus": campus,
+                    "coord_nome": row.get("Nome do Coordenador do Campus", "").strip(),
+                    "coord_email": row.get("Email do Coordenador do Campus", "").strip().lower(),
+                }
+            )
     return coordinators
 
 
@@ -112,13 +89,15 @@ def group_by_coordinator(teams: list[dict]) -> dict:
     por_campus = defaultdict(lambda: {"nome": "", "campus": "", "equipes": []})
     for t in teams:
         entry = por_campus[t["coord_email"]]
-        entry["nome"]   = t["coord_nome"]
+        entry["nome"] = t["coord_nome"]
         entry["campus"] = t["campus"]
-        entry["equipes"].append({
-            "nome":         t["equipe"],
-            "responsavel":  t["resp_nome"],
-            "participantes": t["participantes"],
-        })
+        entry["equipes"].append(
+            {
+                "nome": t["equipe"],
+                "responsavel": t["resp_nome"],
+                "participantes": t["participantes"],
+            }
+        )
     return dict(por_campus)
 
 
@@ -127,10 +106,12 @@ def group_by_advisor(teams: list[dict]) -> dict:
     for t in teams:
         entry = por_resp[t["resp_email"]]
         entry["nome"] = t["resp_nome"]
-        entry["equipes"].append({
-            "nome":         t["equipe"],
-            "participantes": t["participantes"],
-        })
+        entry["equipes"].append(
+            {
+                "nome": t["equipe"],
+                "participantes": t["participantes"],
+            }
+        )
     return dict(por_resp)
 
 
@@ -144,7 +125,7 @@ def format_team_line_resp(equipe: dict) -> str:
     return f"- {equipe['nome']}: {parts}"
 
 
-def send_coordinator_emails(por_campus: dict) -> int:
+def send_coordinator_emails(por_campus: dict, dry_run: bool) -> int:
     print("\n=== Emails para coordenadores de campus ===")
     count = 0
     for email, data in por_campus.items():
@@ -156,12 +137,12 @@ def send_coordinator_emails(por_campus: dict) -> int:
             + "\n"
             + COORD_POST
         )
-        send_email(email, f"{COORD_SUBJECT} {_TIMESTAMP}", body)
+        send_email(email, f"{COORD_SUBJECT} {_TIMESTAMP}", body, dry_run=dry_run)
         count += 1
     return count
 
 
-def send_summary_email(por_campus: dict) -> None:
+def send_summary_email(por_campus: dict, dry_run: bool) -> None:
     print("\n=== Email de resumo para a organização ===")
     lines = "\n".join(
         f"- {data['campus']}: {len(data['equipes'])} equipe(s)"
@@ -169,7 +150,7 @@ def send_summary_email(por_campus: dict) -> None:
     )
     total = sum(len(d["equipes"]) for d in por_campus.values())
     body = SUMMARY_PRE + "\n" + lines + f"\n\nTotal geral: {total} equipe(s)" + "\n" + SUMMARY_POST
-    send_email(SUMMARY_TO, f"{SUMMARY_SUBJECT} {_TIMESTAMP}", body)
+    send_email(SUMMARY_TO, f"{SUMMARY_SUBJECT} {_TIMESTAMP}", body, dry_run=dry_run)
 
 
 def find_no_teams_coordinators(coordinators: list[dict], teams: list[dict]) -> list[dict]:
@@ -181,7 +162,7 @@ def find_no_teams_coordinators(coordinators: list[dict], teams: list[dict]) -> l
     ]
 
 
-def send_no_teams_emails(no_teams_coordinators: list[dict]) -> int:
+def send_no_teams_emails(no_teams_coordinators: list[dict], dry_run: bool) -> int:
     print("\n=== Emails para coordenadores de campi sem equipes ===")
     count = 0
 
@@ -195,13 +176,13 @@ def send_no_teams_emails(no_teams_coordinators: list[dict]) -> int:
             nome=first_name(coord["coord_nome"]),
             campus=coord["campus"],
         )
-        send_email(email, f"{NO_TEAMS_SUBJECT} {_TIMESTAMP}", body)
+        send_email(email, f"{NO_TEAMS_SUBJECT} {_TIMESTAMP}", body, dry_run=dry_run)
         count += 1
 
     return count
 
 
-def send_no_teams_summary_email(no_teams_coordinators: list[dict]) -> None:
+def send_no_teams_summary_email(no_teams_coordinators: list[dict], dry_run: bool) -> None:
     print("\n=== Email de resumo para a organização ===")
     lines = "\n".join(f"- {coord['campus']}" for coord in no_teams_coordinators)
     total = len(no_teams_coordinators)
@@ -212,22 +193,16 @@ def send_no_teams_summary_email(no_teams_coordinators: list[dict]) -> None:
         + "\n"
         + SUMMARY_POST
     )
-    send_email(SUMMARY_TO, f"{NO_TEAMS_SUBJECT} — resumo {_TIMESTAMP}", body)
+    send_email(SUMMARY_TO, f"{NO_TEAMS_SUBJECT} — resumo {_TIMESTAMP}", body, dry_run=dry_run)
 
 
-def send_advisor_emails(por_resp: dict) -> int:
+def send_advisor_emails(por_resp: dict, dry_run: bool) -> int:
     print("\n=== Emails para responsáveis pelas equipes ===")
     count = 0
     for email, data in por_resp.items():
         lines = "\n".join(format_team_line_resp(e) for e in data["equipes"])
-        body = (
-            RESP_PRE.format(nome=first_name(data["nome"]))
-            + "\n"
-            + lines
-            + "\n"
-            + RESP_POST
-        )
-        send_email(email, f"{RESP_SUBJECT} {_TIMESTAMP}", body)
+        body = RESP_PRE.format(nome=first_name(data["nome"])) + "\n" + lines + "\n" + RESP_POST
+        send_email(email, f"{RESP_SUBJECT} {_TIMESTAMP}", body, dry_run=dry_run)
         count += 1
     return count
 
@@ -264,10 +239,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
-    global DRY_RUN
-
     args = parse_args()
-    DRY_RUN = args.dry_run
 
     teams = load_teams(args.csv)
     print(f"Carregadas {len(teams)} equipes de '{args.csv}'.")
@@ -276,8 +248,8 @@ def main() -> None:
         coordinators = load_coordinators(args.coordenadores)
         print(f"Carregados {len(coordinators)} coordenador(es) de '{args.coordenadores}'.")
         no_teams_coordinators = find_no_teams_coordinators(coordinators, teams)
-        n_no_teams = send_no_teams_emails(no_teams_coordinators)
-        send_no_teams_summary_email(no_teams_coordinators)
+        n_no_teams = send_no_teams_emails(no_teams_coordinators, args.dry_run)
+        send_no_teams_summary_email(no_teams_coordinators, args.dry_run)
         print(
             f"\nPronto! {n_no_teams} email(s) para coordenadores de campi sem equipes, "
             f"1 resumo para {SUMMARY_TO}."
@@ -285,13 +257,15 @@ def main() -> None:
         return
 
     por_campus = group_by_coordinator(teams)
-    por_resp   = group_by_advisor(teams)
+    por_resp = group_by_advisor(teams)
 
-    n_coord = send_coordinator_emails(por_campus)
-    n_resp  = send_advisor_emails(por_resp)
-    send_summary_email(por_campus)
+    n_coord = send_coordinator_emails(por_campus, args.dry_run)
+    n_resp = send_advisor_emails(por_resp, args.dry_run)
+    send_summary_email(por_campus, args.dry_run)
 
-    print(f"\nPronto! {n_coord} email(s) para coordenadores, {n_resp} email(s) para responsáveis, 1 resumo para {SUMMARY_TO}.")
+    print(
+        f"\nPronto! {n_coord} email(s) para coordenadores, {n_resp} email(s) para responsáveis, 1 resumo para {SUMMARY_TO}."
+    )
 
 
 if __name__ == "__main__":

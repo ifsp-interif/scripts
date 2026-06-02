@@ -16,6 +16,9 @@ from pathlib import Path
 
 from tabulate import tabulate
 
+from config import EMAIL_INTERIF, SPECIAL_SUMMARY_SUBJECT
+from email_utils import send_email
+
 CSV_FILE = Path(__file__).parent / "equipes_interif.csv"
 
 TEAM_NAME_COL = "Nome da Equipe"
@@ -29,6 +32,7 @@ REQUIRED_COLUMNS = [
     WOMEN_COL,
     HIGH_SCHOOL_COL,
 ]
+
 
 @dataclass(frozen=True)
 class Team:
@@ -63,7 +67,17 @@ def parse_args() -> argparse.Namespace:
         "--output",
         "-o",
         metavar="ARQUIVO.md",
-        help="Salva as listas também em um arquivo Markdown",
+        help="Salva as listas (ou o resumo, com --resumo) em um arquivo Markdown",
+    )
+    parser.add_argument(
+        "--resumo",
+        action="store_true",
+        help="Gera e envia o quadro resumo para interif@ifsp.edu.br; não lista equipes individuais",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Com --resumo: imprime o e-mail sem enviá-lo",
     )
     return parser.parse_args()
 
@@ -177,6 +191,54 @@ def group_tables(groups: TeamGroups) -> list[tuple[str, list[Team], bool]]:
     ]
 
 
+def build_summary(groups: TeamGroups) -> dict[str, dict[str, int]]:
+    summary: dict[str, dict[str, int]] = {}
+    for title, teams, _ in group_tables(groups):
+        campus_counts: dict[str, int] = {}
+        for team in teams:
+            campus_counts[team.campus] = campus_counts.get(team.campus, 0) + 1
+        summary[title] = campus_counts
+    return summary
+
+
+def render_summary(groups: TeamGroups, csv_path: Path) -> str:
+    lines = [
+        "Quadro resumo — Equipes especiais",
+        f"Arquivo: {csv_path.resolve()}",
+        f"Total de equipes: {groups.total_equipes}",
+    ]
+    for title, campus_counts in build_summary(groups).items():
+        total_cat = sum(campus_counts.values())
+        lines.append("")
+        lines.append(f"{title} ({total_cat})")
+        for campus in sorted(campus_counts):
+            lines.append(f"  {campus}: {campus_counts[campus]}")
+    return "\n".join(lines)
+
+
+def render_summary_markdown(groups: TeamGroups, csv_path: Path) -> str:
+    lines = [
+        "# Quadro resumo — Equipes especiais",
+        "",
+        f"Arquivo: `{csv_path}`",
+        f"Total de equipes: **{groups.total_equipes}**",
+        "",
+    ]
+    for title, campus_counts in build_summary(groups).items():
+        total_cat = sum(campus_counts.values())
+        lines.append(f"## {title} ({total_cat})")
+        lines.append("")
+        if campus_counts:
+            rows = [[campus, campus_counts[campus]] for campus in sorted(campus_counts)]
+            lines.extend(
+                tabulate(rows, headers=["Campus", "Equipes"], tablefmt="github").splitlines()
+            )
+        else:
+            lines.append("*(nenhuma equipe)*")
+        lines.append("")
+    return "\n".join(lines)
+
+
 def render(groups: TeamGroups, csv_path: Path) -> None:
     print("Equipes especiais - InterIF")
     print(f"Arquivo: {csv_path.resolve()}")
@@ -253,6 +315,18 @@ def main() -> None:
         sys.exit(1)
 
     groups = group_teams(teams)
+
+    if args.resumo:
+        body = render_summary(groups, csv_path)
+        print(body)
+        print()
+        send_email(EMAIL_INTERIF, SPECIAL_SUMMARY_SUBJECT, body, dry_run=args.dry_run)
+        if args.output:
+            output_path = Path(args.output)
+            output_path.write_text(render_summary_markdown(groups, csv_path), encoding="utf-8")
+            print(f"\nMarkdown salvo em {output_path}")
+        return
+
     render(groups, csv_path)
 
     if args.output:

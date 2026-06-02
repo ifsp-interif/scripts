@@ -18,7 +18,6 @@ Uso:
 
 import argparse
 import io
-import subprocess
 import sys
 import unicodedata
 from collections import defaultdict
@@ -47,6 +46,7 @@ from config import (
     PLACA_TITULO_LINHA2,
     TITULO_EVENTO,
 )
+from email_utils import send_email
 from interif_core import (
     CAMPI_FILE,
     CSV_FILE,
@@ -59,13 +59,14 @@ from interif_core import (
 
 # ── Caminhos padrão ───────────────────────────────────────────────────────────
 
-_HERE         = Path(__file__).parent
-_ASSETS       = _HERE / "assets"
+_HERE = Path(__file__).parent
+_ASSETS = _HERE / "assets"
 USUARIOS_FILE = _HERE / "output" / "usuarios.txt"
-LOGO_PATH     = _ASSETS / "logo.png"
-LOGO_DIREITA  = _ASSETS / "IFSP_Logo.jpg"
+LOGO_PATH = _ASSETS / "logo.png"
+LOGO_DIREITA = _ASSETS / "IFSP_Logo.jpg"
 
 # ── Helpers de nome de arquivo ────────────────────────────────────────────────
+
 
 def _limpar_nome(texto: str) -> str:
     """Remove colchetes, acentos e caracteres inválidos; substitui espaços por _."""
@@ -75,6 +76,7 @@ def _limpar_nome(texto: str) -> str:
 
 
 # ── Separação de fullname ─────────────────────────────────────────────────────
+
 
 def _separar_por_colchete(texto: str) -> tuple[str, str]:
     """'[IFSP - X] Nome' → ('[IFSP - X]', 'Nome')."""
@@ -86,11 +88,12 @@ def _separar_por_colchete(texto: str) -> tuple[str, str]:
 
 # ── Registro de fontes ────────────────────────────────────────────────────────
 
+
 def _registrar_fontes() -> None:
     """Registra as fontes decorativas usadas nas placas."""
     fontes = {
-        "PlacaTitulo":   PLACA_FONTE_TITULO,
-        "PlacaNome":     PLACA_FONTE_NOME,
+        "PlacaTitulo": PLACA_FONTE_TITULO,
+        "PlacaNome": PLACA_FONTE_NOME,
         "PlacaNomeBold": PLACA_FONTE_NOME_BOLD,
     }
     for alias, arquivo in fontes.items():
@@ -106,6 +109,7 @@ def _registrar_fontes() -> None:
 
 # ── Gradiente em memória ──────────────────────────────────────────────────────
 
+
 def _gerar_gradiente(
     largura: int,
     altura: int,
@@ -117,22 +121,22 @@ def _gerar_gradiente(
     Retorna um BytesIO pronto para ImageReader — nenhum arquivo é gravado em disco.
     """
     cores = [
-        (246, 79,  89),   # vermelho-rosado
+        (246, 79, 89),  # vermelho-rosado
         (196, 113, 237),  # roxo
-        (18,  194, 233),  # azul claro
+        (18, 194, 233),  # azul claro
     ]
 
-    img  = Image.new("RGB", (largura, altura), color="white")
+    img = Image.new("RGB", (largura, altura), color="white")
     draw = ImageDraw.Draw(img)
 
     n = len(cores) - 1
     span = altura - 2 * margem_recuo
 
     for y in range(margem_recuo, altura - margem_recuo):
-        t        = (y - margem_recuo) / span
+        t = (y - margem_recuo) / span
         t_scaled = t * n
-        i        = min(int(t_scaled), n - 1)
-        f        = t_scaled - i
+        i = min(int(t_scaled), n - 1)
+        f = t_scaled - i
         r1, g1, b1 = cores[i]
         r2, g2, b2 = cores[i + 1]
         r = int(r1 + (r2 - r1) * f)
@@ -145,8 +149,8 @@ def _gerar_gradiente(
         [
             margem_recuo + espessura_borda,
             margem_recuo + espessura_borda,
-            largura  - margem_recuo - espessura_borda,
-            altura   - margem_recuo - espessura_borda,
+            largura - margem_recuo - espessura_borda,
+            altura - margem_recuo - espessura_borda,
         ],
         fill="white",
     )
@@ -158,6 +162,7 @@ def _gerar_gradiente(
 
 
 # ── Ajuste automático de tamanho de fonte ─────────────────────────────────────
+
 
 def _ajustar_fonte(
     texto: str,
@@ -176,6 +181,7 @@ def _ajustar_fonte(
 
 # ── Geração de PDF ────────────────────────────────────────────────────────────
 
+
 def gerar_pdf_campus(credenciais: list[CredencialEquipe], caminho_pdf: Path) -> None:
     """
     Gera um PDF com uma página landscape A4 por equipe.
@@ -183,11 +189,11 @@ def gerar_pdf_campus(credenciais: list[CredencialEquipe], caminho_pdf: Path) -> 
     as páginas via ImageReader (que cacheia internamente).
     """
     larg_pag, alt_pag = landscape(A4)
-    largura, altura   = int(larg_pag), int(alt_pag)
+    largura, altura = int(larg_pag), int(alt_pag)
 
     # Gradiente gerado em memória — sem arquivo temporário em disco
-    buf      = _gerar_gradiente(largura, altura)
-    bg_img   = ImageReader(buf)
+    buf = _gerar_gradiente(largura, altura)
+    bg_img = ImageReader(buf)
 
     c = canvas.Canvas(str(caminho_pdf), pagesize=(larg_pag, alt_pag))
 
@@ -204,21 +210,26 @@ def gerar_pdf_campus(credenciais: list[CredencialEquipe], caminho_pdf: Path) -> 
         # ── logos ──────────────────────────────────────────────────────────────
         if LOGO_PATH.exists():
             with suppress(Exception):
-                c.drawImage(str(LOGO_PATH),
-                            15 * mm + 20, alt_pag - 190,
-                            width=100, height=130, mask="auto")
+                c.drawImage(
+                    str(LOGO_PATH), 15 * mm + 20, alt_pag - 190, width=100, height=130, mask="auto"
+                )
         if LOGO_DIREITA.exists():
             with suppress(Exception):
-                c.drawImage(str(LOGO_DIREITA),
-                            larg_pag - 170, alt_pag - 210,
-                            width=120, height=160, mask="auto")
+                c.drawImage(
+                    str(LOGO_DIREITA),
+                    larg_pag - 170,
+                    alt_pag - 210,
+                    width=120,
+                    height=160,
+                    mask="auto",
+                )
 
         # ── nome da equipe (centralizado, tamanho automático) ──────────────────
-        fullname   = f"[IFSP - {cred.sigla or cred.campus}] {cred.nome_equipe}"
+        fullname = f"[IFSP - {cred.sigla or cred.campus}] {cred.nome_equipe}"
         _, nome_eq = _separar_por_colchete(fullname)
-        margem_recuo  = 10
-        largura_util  = larg_pag - 2 * margem_recuo - 55
-        tamanho_nome  = _ajustar_fonte(nome_eq, largura_util, "PlacaNomeBold")
+        margem_recuo = 10
+        largura_util = larg_pag - 2 * margem_recuo - 55
+        tamanho_nome = _ajustar_fonte(nome_eq, largura_util, "PlacaNomeBold")
 
         c.setFont("PlacaNomeBold", tamanho_nome)
         c.drawCentredString(larg_pag / 2, alt_pag / 2 - 30, nome_eq)
@@ -229,13 +240,11 @@ def gerar_pdf_campus(credenciais: list[CredencialEquipe], caminho_pdf: Path) -> 
         c.drawCentredString(larg_pag / 2, alt_pag / 2 - 90, campus_label)
 
         # ── faixa preta inferior com data do evento ────────────────────────────
-        margem      = 15 * mm
+        margem = 15 * mm
         faixa_altura = 35
 
         c.setFillColor(colors.black)
-        c.rect(margem, margem,
-               larg_pag - 2 * margem - 100,
-               faixa_altura, fill=1)
+        c.rect(margem, margem, larg_pag - 2 * margem - 100, faixa_altura, fill=1)
 
         c.setFillColor(colors.white)
         c.setFont("Helvetica-Bold", 17)
@@ -247,50 +256,15 @@ def gerar_pdf_campus(credenciais: list[CredencialEquipe], caminho_pdf: Path) -> 
 
         c.setFillColor(colors.white)
         c.setFont("Helvetica-Bold", 19)
-        c.drawCentredString(larg_pag - margem - 90, margem + 10,
-                            cred.username.upper())
+        c.drawCentredString(larg_pag - margem - 90, margem + 10, cred.username.upper())
 
         c.showPage()
 
     c.save()
 
 
-# ── Envio de email ────────────────────────────────────────────────────────────
-
-def _send_pdf(
-    to: str,
-    subject: str,
-    body: str,
-    attach: Path,
-    *,
-    dry_run: bool,
-) -> None:
-    """Envia um PDF como anexo via `gws gmail +send`. Em dry-run apenas exibe."""
-    if dry_run:
-        print(f"\n--- DRY-RUN: email para {to} ---")
-        print(f"Assunto: {subject}")
-        print(f"Anexo: {attach}")
-        print()
-        print(body)
-        print("--- fim do email ---")
-        return
-
-    print(f"  -> Enviando para {to} ...")
-    cmd = [
-        "gws", "gmail", "+send",
-        "--to",      to,
-        "--subject", subject,
-        "--body",    body,
-        "--attach",  str(attach),
-    ]
-    try:
-        subprocess.run(cmd, check=True)
-        print("    OK")
-    except subprocess.CalledProcessError as exc:
-        print(f"    Erro: {exc}")
-
-
 # ── CLI ───────────────────────────────────────────────────────────────────────
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -318,13 +292,15 @@ def parse_args() -> argparse.Namespace:
         help=f"Mapeamento campus→sigla (padrão: {CAMPI_FILE})",
     )
     parser.add_argument(
-        "-o", "--output",
+        "-o",
+        "--output",
         default="placas",
         metavar="DIR",
         help="Diretório de saída dos PDFs (padrão: placas/)",
     )
     parser.add_argument(
-        "-s", "--send",
+        "-s",
+        "--send",
         action="store_true",
         help="Envia cada PDF ao coordenador do campus via gws gmail",
     )
@@ -338,13 +314,14 @@ def parse_args() -> argparse.Namespace:
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
+
 def main() -> None:
     args = parse_args()
 
     usuarios_path = Path(args.usuarios)
-    csv_path      = Path(args.csv)
-    campi_path    = Path(args.campi)
-    output_dir    = Path(args.output)
+    csv_path = Path(args.csv)
+    campi_path = Path(args.campi)
+    output_dir = Path(args.output)
 
     # Verifica arquivos de entrada
     for p in (usuarios_path, csv_path, campi_path):
@@ -364,9 +341,9 @@ def main() -> None:
     _registrar_fontes()
 
     # Carrega dados
-    campi     = load_campi(campi_path)
+    campi = load_campi(campi_path)
     teams_csv = load_teams(csv_path)
-    usuarios  = parse_usuarios(usuarios_path)
+    usuarios = parse_usuarios(usuarios_path)
 
     print(f"{len(usuarios)} equipe(s) em usuarios.txt | {len(teams_csv)} linha(s) no CSV.\n")
 
@@ -380,12 +357,12 @@ def main() -> None:
     # Cria diretório de saída
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    n_pdfs   = 0
+    n_pdfs = 0
     n_emails = 0
 
     for campus, grupo in por_campus.items():
         nome_arquivo = _limpar_nome(f"IFSP_-_{campus}") + ".pdf"
-        caminho_pdf  = output_dir / nome_arquivo
+        caminho_pdf = output_dir / nome_arquivo
 
         gerar_pdf_campus(grupo, caminho_pdf)
         n_pdfs += 1
@@ -395,16 +372,16 @@ def main() -> None:
         # Envio opcional
         if args.send or args.dry_run:
             coord_email = grupo[0].coord_email if grupo else ""
-            coord_nome  = grupo[0].primeiro_nome_coord if grupo else "Coordenador(a)"
+            coord_nome = grupo[0].primeiro_nome_coord if grupo else "Coordenador(a)"
 
             if not coord_email:
                 print(f"  Aviso: sem email de coordenador para {campus} — envio ignorado")
             else:
                 body = PLACA_BODY_TEMPLATE.format(nome=coord_nome, campus=campus)
-                _send_pdf(
-                    to=coord_email,
-                    subject=f"{PLACA_SUBJECT} — {campus}",
-                    body=body,
+                send_email(
+                    coord_email,
+                    f"{PLACA_SUBJECT} — {campus}",
+                    body,
                     attach=caminho_pdf,
                     dry_run=args.dry_run,
                 )

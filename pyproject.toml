@@ -19,10 +19,7 @@ dependencies = [
     "pillow>=10.0",
     # lista_equipes_especiais.py
     "tabulate>=0.9",
-]
-
-[project.optional-dependencies]
-dev = [
+    # testes
     "pytest>=8.0",
 ]
 
@@ -65,3 +62,6 @@ ignore = ["E501"]   # linha longa — controlada pelo formatter
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]

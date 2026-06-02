@@ -16,7 +16,6 @@ Uso:
 """
 
 import argparse
-import subprocess
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -25,6 +24,7 @@ from tabulate import tabulate
 
 from config import CRED_SUBJECT_PREFIX as EMAIL_SUBJECT_PREFIX
 from config import EMAIL_INTERIF, TITULO_EVENTO
+from email_utils import send_email
 from interif_core import (
     CAMPI_FILE,
     CSV_FILE,
@@ -35,35 +35,10 @@ from interif_core import (
     parse_usuarios,
 )
 
-_HERE           = Path(__file__).parent
-USUARIOS_FILE   = _HERE / "output" / "usuarios.txt"
+_HERE = Path(__file__).parent
+USUARIOS_FILE = _HERE / "output" / "usuarios.txt"
 
 # ── Envio de emails ───────────────────────────────────────────────────────────
-
-def _send(
-    to: str,
-    subject: str,
-    body: str,
-    *,
-    cc: str | None = None,
-    dry_run: bool,
-) -> None:
-    """Wrapper sobre `gws gmail +send`. Em dry-run, exibe o email no terminal sem enviar."""
-    dest = to + (f" (cc: {cc})" if cc else "")
-    if dry_run:
-        print(f"  -> Para: {dest}")
-        print(f"     Assunto: {subject}")
-        print(body)
-        return
-    print(f"  -> Enviando para {dest} ...")
-    cmd = ["gws", "gmail", "+send", "--to", to, "--subject", subject, "--body", body]
-    if cc:
-        cmd += ["--cc", cc]
-    try:
-        subprocess.run(cmd, check=True)
-        print("    OK")
-    except subprocess.CalledProcessError as exc:
-        print(f"    Erro: {exc}")
 
 
 def enviar_emails_coordenadores(
@@ -83,7 +58,7 @@ def enviar_emails_coordenadores(
             continue
         if cred.campus not in por_campus:
             por_campus[cred.campus] = {
-                "coord_nome":  cred.coord_nome,
+                "coord_nome": cred.coord_nome,
                 "coord_email": cred.coord_email,
                 "por_tecnico": defaultdict(lambda: {"resp_nome": "", "equipes": []}),
             }
@@ -93,7 +68,11 @@ def enviar_emails_coordenadores(
 
     count = 0
     for campus, data in por_campus.items():
-        primeiro = data["coord_nome"].strip().split()[0] if data["coord_nome"].strip() else "Coordenador(a)"
+        primeiro = (
+            data["coord_nome"].strip().split()[0]
+            if data["coord_nome"].strip()
+            else "Coordenador(a)"
+        )
         linhas = [
             f"Olá, {primeiro}!\n\n",
             f"Seguem as credenciais de acesso das equipes do campus {campus}:\n",
@@ -104,10 +83,10 @@ def enviar_emails_coordenadores(
                 linhas.append(f"  - {cred.nome_equipe}: {cred.username} / {cred.password}\n")
         linhas.append(f"\nAtenciosamente,\nOrganização {TITULO_EVENTO}")
 
-        _send(
-            to=data["coord_email"],
-            subject=f"{EMAIL_SUBJECT_PREFIX} — Campus {campus}",
-            body="".join(linhas),
+        send_email(
+            data["coord_email"],
+            f"{EMAIL_SUBJECT_PREFIX} — Campus {campus}",
+            "".join(linhas),
             dry_run=dry_run,
         )
         count += 1
@@ -143,12 +122,7 @@ def enviar_emails_tecnicos(
             linhas.append(f"{cred.nome_equipe}: {cred.username} / {cred.password}\n")
         linhas.append(f"\nAtenciosamente,\nOrganização {TITULO_EVENTO}")
 
-        _send(
-            to=email,
-            subject=EMAIL_SUBJECT_PREFIX,
-            body="".join(linhas),
-            dry_run=dry_run,
-        )
+        send_email(email, EMAIL_SUBJECT_PREFIX, "".join(linhas), dry_run=dry_run)
         count += 1
 
     return count
@@ -180,10 +154,10 @@ def enviar_emails_participantes(
         to = cred.emails_cred[0]
         cc = ",".join(cred.emails_cred[1:]) if len(cred.emails_cred) > 1 else None
 
-        _send(
-            to=to,
-            subject=f"{EMAIL_SUBJECT_PREFIX} — Equipe {cred.nome_equipe}",
-            body=body,
+        send_email(
+            to,
+            f"{EMAIL_SUBJECT_PREFIX} — Equipe {cred.nome_equipe}",
+            body,
             cc=cc,
             dry_run=dry_run,
         )
@@ -218,15 +192,16 @@ def enviar_resumo(
         linhas.append(f"  {campus}: {n} equipe(s)\n")
     linhas.append(f"\nTotal: {len(credenciais)} equipe(s)\n")
 
-    _send(
-        to=EMAIL_INTERIF,
-        subject=f"Resumo de envio de credenciais — {TITULO_EVENTO}",
-        body="".join(linhas),
+    send_email(
+        EMAIL_INTERIF,
+        f"Resumo de envio de credenciais — {TITULO_EVENTO}",
+        "".join(linhas),
         dry_run=dry_run,
     )
 
 
 # ── Exibição ──────────────────────────────────────────────────────────────────
+
 
 def render_summary(credenciais: list[CredencialEquipe], n_emails: int, dry_run: bool) -> None:
     por_campus: dict[str, int] = {}
@@ -247,6 +222,7 @@ def render_summary(credenciais: list[CredencialEquipe], n_emails: int, dry_run: 
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -284,8 +260,8 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     usuarios_path = Path(args.usuarios)
-    csv_path      = Path(args.csv)
-    campi_path    = Path(args.campi)
+    csv_path = Path(args.csv)
+    campi_path = Path(args.campi)
 
     # Verifica arquivos de entrada
     for p in (usuarios_path, csv_path, campi_path):
@@ -300,17 +276,17 @@ def main() -> None:
     print(f"Modo:     {'dry-run' if args.dry_run else 'envio real'}")
     print()
 
-    campi     = load_campi(campi_path)
+    campi = load_campi(campi_path)
     teams_csv = load_teams(csv_path)
-    usuarios  = parse_usuarios(usuarios_path)
+    usuarios = parse_usuarios(usuarios_path)
 
     print(f"{len(usuarios)} equipe(s) em usuarios.txt | {len(teams_csv)} linha(s) no CSV.")
 
     credenciais = enriquecer(usuarios, teams_csv, campi, emit=print)
 
     n_coord = enviar_emails_coordenadores(credenciais, args.dry_run)
-    n_tec   = enviar_emails_tecnicos(credenciais, args.dry_run)
-    n_part  = enviar_emails_participantes(credenciais, args.dry_run)
+    n_tec = enviar_emails_tecnicos(credenciais, args.dry_run)
+    n_part = enviar_emails_participantes(credenciais, args.dry_run)
     enviar_resumo(credenciais, n_coord, n_tec, n_part, args.dry_run)
     total_emails = n_coord + n_tec + n_part + 1
 

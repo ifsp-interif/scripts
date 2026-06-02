@@ -16,7 +16,6 @@ Uso:
 """
 
 import argparse
-import subprocess
 import sys
 import unicodedata
 from collections import defaultdict
@@ -36,6 +35,7 @@ from config import (
     ETIQ_SUBJECT,
     TITULO_EVENTO,
 )
+from email_utils import send_email
 from interif_core import (
     CAMPI_FILE,
     CSV_FILE,
@@ -48,21 +48,22 @@ from interif_core import (
 
 # ── Caminhos padrão ───────────────────────────────────────────────────────────
 
-_HERE         = Path(__file__).parent
-_ASSETS       = _HERE / "assets"
+_HERE = Path(__file__).parent
+_ASSETS = _HERE / "assets"
 USUARIOS_FILE = _HERE / "output" / "usuarios.txt"
-LOGO_PATH     = _ASSETS / "logo.png"
+LOGO_PATH = _ASSETS / "logo.png"
 
 # ── Layout das etiquetas ──────────────────────────────────────────────────────
 
-_COLS         = 2
-_ROWS         = 6
-_LABEL_W      = 95 * mm
-_LABEL_H      = 45 * mm
-_X_MARGIN     = 9.5 * mm
-_Y_MARGIN     = 10.57 * mm
+_COLS = 2
+_ROWS = 6
+_LABEL_W = 95 * mm
+_LABEL_H = 45 * mm
+_X_MARGIN = 9.5 * mm
+_Y_MARGIN = 10.57 * mm
 
 # ── Helpers de nome de arquivo ────────────────────────────────────────────────
+
 
 def _limpar_nome(texto: str) -> str:
     """Remove colchetes, acentos e caracteres inválidos; substitui espaços por _."""
@@ -73,6 +74,7 @@ def _limpar_nome(texto: str) -> str:
 
 # ── Separação de fullname ─────────────────────────────────────────────────────
 
+
 def _separar_por_colchete(texto: str) -> tuple[str, str]:
     """'[IFSP - X] Nome' → ('[IFSP - X]', 'Nome')."""
     if "]" in texto:
@@ -82,6 +84,7 @@ def _separar_por_colchete(texto: str) -> tuple[str, str]:
 
 
 # ── Geração de PDF de etiquetas ───────────────────────────────────────────────
+
 
 def _registrar_fonte() -> None:
     """Registra a fonte monospaced definida em config.py."""
@@ -127,8 +130,7 @@ def gerar_pdf_campus(credenciais: list[CredencialEquipe], caminho_pdf: Path) -> 
         logo_x = x + (_LABEL_W - 10) - logo_w_mm - 10
         logo_y = y + _LABEL_H - 50 - logo_h_mm
         if logo:
-            c.drawImage(logo, logo_x, logo_y - 30,
-                        width=logo_w_mm, height=logo_h_mm, mask="auto")
+            c.drawImage(logo, logo_x, logo_y - 30, width=logo_w_mm, height=logo_h_mm, mask="auto")
 
         # ── Posições verticais explícitas (y cresce para cima no PDF) ──────────
         # De cima para baixo na etiqueta:
@@ -151,10 +153,10 @@ def gerar_pdf_campus(credenciais: list[CredencialEquipe], caminho_pdf: Path) -> 
 
         # Name
         login_label = "Name: "
-        login_text  = cred.username
+        login_text = cred.username
         lw_label = c.stringWidth(login_label, "Helvetica-Bold", 11)
-        lw_text  = c.stringWidth(login_text,  "EtiqMono",       11)
-        start_x  = x + (_LABEL_W - 10) / 2 - (lw_label + lw_text) / 2
+        lw_text = c.stringWidth(login_text, "EtiqMono", 11)
+        start_x = x + (_LABEL_W - 10) / 2 - (lw_label + lw_text) / 2
 
         c.setFont("Helvetica-Bold", 11)
         c.drawString(start_x, logo_y + 18, login_label)
@@ -163,9 +165,9 @@ def gerar_pdf_campus(credenciais: list[CredencialEquipe], caminho_pdf: Path) -> 
 
         # Password
         senha_label = "Password: "
-        senha_text  = cred.password
+        senha_text = cred.password
         pw_label = c.stringWidth(senha_label, "Helvetica-Bold", 11)
-        pw_text  = c.stringWidth(senha_text,  "EtiqMono",       11)
+        pw_text = c.stringWidth(senha_text, "EtiqMono", 11)
         start_px = x + (_LABEL_W - 10) / 2 - (pw_label + pw_text) / 2
 
         c.setFont("Helvetica-Bold", 11)
@@ -175,7 +177,7 @@ def gerar_pdf_campus(credenciais: list[CredencialEquipe], caminho_pdf: Path) -> 
 
         # Separador + rótulo do evento (abaixo das credenciais)
         c.setFont("Helvetica", 11)
-        c.drawString(x + 5, logo_y - 2,  "_______________________________")
+        c.drawString(x + 5, logo_y - 2, "_______________________________")
         c.setFont("Helvetica", 8)
         c.drawString(x + 5, logo_y - 17, "INTERIF TEAM CREDENTIALS")
         c.setFont("Helvetica-Bold", 8)
@@ -184,42 +186,8 @@ def gerar_pdf_campus(credenciais: list[CredencialEquipe], caminho_pdf: Path) -> 
     c.save()
 
 
-# ── Envio de email ────────────────────────────────────────────────────────────
-
-def _send_pdf(
-    to: str,
-    subject: str,
-    body: str,
-    attach: Path,
-    *,
-    dry_run: bool,
-) -> None:
-    """Envia um PDF como anexo via `gws gmail +send`. Em dry-run apenas exibe."""
-    if dry_run:
-        print(f"\n--- DRY-RUN: email para {to} ---")
-        print(f"Assunto: {subject}")
-        print(f"Anexo: {attach}")
-        print()
-        print(body)
-        print("--- fim do email ---")
-        return
-
-    print(f"  -> Enviando para {to} ...")
-    cmd = [
-        "gws", "gmail", "+send",
-        "--to", to,
-        "--subject", subject,
-        "--body", body,
-        "--attach", str(attach),
-    ]
-    try:
-        subprocess.run(cmd, check=True)
-        print("    OK")
-    except subprocess.CalledProcessError as exc:
-        print(f"    Erro: {exc}")
-
-
 # ── CLI ───────────────────────────────────────────────────────────────────────
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -247,13 +215,15 @@ def parse_args() -> argparse.Namespace:
         help=f"Mapeamento campus→sigla (padrão: {CAMPI_FILE})",
     )
     parser.add_argument(
-        "-o", "--output",
+        "-o",
+        "--output",
         default="etiquetas",
         metavar="DIR",
         help="Diretório de saída dos PDFs (padrão: etiquetas/)",
     )
     parser.add_argument(
-        "-s", "--send",
+        "-s",
+        "--send",
         action="store_true",
         help="Envia cada PDF ao coordenador do campus via gws gmail",
     )
@@ -267,13 +237,14 @@ def parse_args() -> argparse.Namespace:
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
+
 def main() -> None:
     args = parse_args()
 
     usuarios_path = Path(args.usuarios)
-    csv_path      = Path(args.csv)
-    campi_path    = Path(args.campi)
-    output_dir    = Path(args.output)
+    csv_path = Path(args.csv)
+    campi_path = Path(args.campi)
+    output_dir = Path(args.output)
 
     # Verifica arquivos de entrada
     for p in (usuarios_path, csv_path, campi_path):
@@ -293,9 +264,9 @@ def main() -> None:
     _registrar_fonte()
 
     # Carrega dados
-    campi     = load_campi(campi_path)
+    campi = load_campi(campi_path)
     teams_csv = load_teams(csv_path)
-    usuarios  = parse_usuarios(usuarios_path)
+    usuarios = parse_usuarios(usuarios_path)
 
     print(f"{len(usuarios)} equipe(s) em usuarios.txt | {len(teams_csv)} linha(s) no CSV.\n")
 
@@ -309,12 +280,12 @@ def main() -> None:
     # Cria diretório de saída
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    n_pdfs   = 0
+    n_pdfs = 0
     n_emails = 0
 
     for campus, grupo in por_campus.items():
         nome_arquivo = _limpar_nome(f"IFSP_-_{campus}") + ".pdf"
-        caminho_pdf  = output_dir / nome_arquivo
+        caminho_pdf = output_dir / nome_arquivo
 
         gerar_pdf_campus(grupo, caminho_pdf)
         n_pdfs += 1
@@ -324,16 +295,16 @@ def main() -> None:
         # Envio opcional
         if args.send or args.dry_run:
             coord_email = grupo[0].coord_email if grupo else ""
-            coord_nome  = grupo[0].primeiro_nome_coord if grupo else "Coordenador(a)"
+            coord_nome = grupo[0].primeiro_nome_coord if grupo else "Coordenador(a)"
 
             if not coord_email:
                 print(f"  Aviso: sem email de coordenador para {campus} — envio ignorado")
             else:
                 body = ETIQ_BODY_TEMPLATE.format(nome=coord_nome, campus=campus)
-                _send_pdf(
-                    to=coord_email,
-                    subject=f"{ETIQ_SUBJECT} — {campus}",
-                    body=body,
+                send_email(
+                    coord_email,
+                    f"{ETIQ_SUBJECT} — {campus}",
+                    body,
                     attach=caminho_pdf,
                     dry_run=args.dry_run,
                 )
