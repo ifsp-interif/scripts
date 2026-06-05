@@ -24,6 +24,8 @@ equipes_interif.py        ← gera equipes_interif.csv a partir das planilhas
        │
        ├─► coach_aluno_email.py        ← detecta coaches com email @aluno.ifsp.edu.br
        │
+       ├─► duplicatas_participantes.py ← detecta alunos inscritos em mais de uma equipe
+       │
        ├─► total_camisetas.py         ← contagem de camisetas por tamanho e campus
        │
        ├─► lista_equipes_especiais.py ← lista equipes por categoria especial
@@ -45,37 +47,42 @@ equipes_interif.py        ← gera equipes_interif.csv a partir das planilhas
 # 1. Gerar o CSV a partir das planilhas
 uv run python equipes_interif.py --campi <ID_CAMPI> --teams <ID_EQUIPES>
 
-# 2. Validar os CPFs e corrigir eventuais inválidos
+# 2. Verificar alunos inscritos em mais de uma equipe
+uv run python duplicatas_participantes.py
+uv run python duplicatas_participantes.py --notificar --dry-run   # revisar antes de enviar
+uv run python duplicatas_participantes.py --notificar             # notificar os envolvidos
+
+# 3. Validar os CPFs e corrigir eventuais inválidos
 uv run python cpf_check.py --invalidos
 uv run python cpf_check.py --notificar --dry-run   # revisar antes de enviar
 uv run python cpf_check.py --notificar             # notificar os inválidos
 
-# 3. Enviar os emails de confirmação de inscrição
+# 4. Enviar os emails de confirmação de inscrição
 uv run python inscricoes_atuais.py
 
-# 4. Verificar pedidos de camiseta
+# 5. Verificar pedidos de camiseta
 uv run python total_camisetas.py
 uv run python total_camisetas.py -o camisetas.md   # exportar como Markdown
 
-# 4b. Listar equipes especiais (ensino médio, femininas, mistas)
+# 5b. Listar equipes especiais (ensino médio, femininas, mistas)
 uv run python lista_equipes_especiais.py
 uv run python lista_equipes_especiais.py -o especiais.md   # exportar como Markdown
 
-# 5. Gerar os arquivos de configuração do BOCA
+# 6. Gerar os arquivos de configuração do BOCA
 uv run python gerar_arquivos_boca.py
 # ou, em ambiente de teste:
 uv run python gerar_arquivos_boca.py --dry-run
 
-# 6. Enviar credenciais de acesso por email
+# 7. Enviar credenciais de acesso por email
 uv run python enviar_credenciais.py --dry-run      # revisar antes de enviar
 uv run python enviar_credenciais.py                # disparar os emails
 
-# 7. Gerar etiquetas de credenciais (uma por equipe, agrupadas por campus)
+# 8. Gerar etiquetas de credenciais (uma por equipe, agrupadas por campus)
 uv run python gerar_etiquetas.py --dry-run            # gera PDFs, simula envio
 uv run python gerar_etiquetas.py                      # gera PDFs em etiquetas/
 uv run python gerar_etiquetas.py --send               # gera PDFs e envia ao coordenador
 
-# 8. Gerar placas de identificação (uma por equipe, agrupadas por campus)
+# 9. Gerar placas de identificação (uma por equipe, agrupadas por campus)
 uv run python gerar_placas.py --dry-run               # gera PDFs, simula envio
 uv run python gerar_placas.py                         # gera PDFs em placas/
 uv run python gerar_placas.py --send                  # gera PDFs e envia ao coordenador
@@ -122,7 +129,52 @@ Equipes sem coordenador de campus correspondente são listadas no terminal ao fi
 
 ---
 
-## 2. `cpf_check.py` — Validar CPFs
+## 2. `duplicatas_participantes.py` — Detectar alunos em múltiplas equipes
+
+Lê o `equipes_interif.csv` e verifica se algum aluno (participante 1, 2 ou 3) está inscrito em mais de uma equipe, usando **e-mail** e **CPF** como critérios de identificação independentes. Coaches não são verificados, pois podem ser responsáveis por múltiplas equipes.
+
+Quando o mesmo aluno é detectado por ambos os critérios, os conflitos são mesclados em uma única notificação.
+
+### Uso
+
+```bash
+uv run python duplicatas_participantes.py [ARQUIVO] [opções]
+```
+
+`ARQUIVO` é opcional; o padrão é `equipes_interif.csv` no mesmo diretório do script.
+
+### Opções
+
+| Opção | Atalho | Descrição |
+|-------|--------|-----------|
+| `--notificar` | `-n` | Envia email para todos os envolvidos em cada conflito |
+| `--dry-run` | | Mostra um preview dos emails no terminal sem chamar o `gws` (requer `--notificar`) |
+
+### Emails de notificação (`--notificar`)
+
+Para cada aluno detectado em mais de uma equipe, o script envia uma mensagem via `gws gmail +send` com:
+
+- **Para (`--to`):** `EMAIL_INTERIF` (`config.py`)
+- **Cópia (`--cc`):** o aluno, os coaches de todas as equipes envolvidas e os coordenadores locais de todos os campi envolvidos (deduplicados)
+
+O email informa o critério de detecção (e-mail, CPF ou ambos), lista todas as equipes em que o aluno aparece e solicita que os envolvidos indiquem a equipe correta.
+
+### Exemplos
+
+```bash
+# Listar conflitos no terminal
+uv run python duplicatas_participantes.py
+
+# Simular o envio de notificações
+uv run python duplicatas_participantes.py --notificar --dry-run
+
+# Enviar notificações de verdade
+uv run python duplicatas_participantes.py --notificar
+```
+
+---
+
+## 3. `cpf_check.py` — Validar CPFs
 
 Lê o `equipes_interif.csv`, extrai e valida os CPFs de responsáveis (coaches) e participantes (alunos) usando o algoritmo módulo 11 oficial. Exibe uma lista ordenada por campus e pode notificar por email as pessoas com CPF inválido.
 
@@ -180,7 +232,7 @@ uv run python cpf_check.py --notificar
 
 ---
 
-## 3. `inscricoes_atuais.py` — Enviar emails de confirmação
+## 4. `inscricoes_atuais.py` — Enviar emails de confirmação
 
 Lê o `equipes_interif.csv` e envia três grupos de emails via Gmail:
 
@@ -219,7 +271,7 @@ Use `--dry-run` antes de executar o envio real para conferir destinatário, assu
 
 ---
 
-## 4. `total_camisetas.py` — Contagem de camisetas
+## 5. `total_camisetas.py` — Contagem de camisetas
 
 Lê o `equipes_interif.csv` e exibe o total de camisetas por tamanho em cada campus. Participantes que responderam "Não quero camiseta" são contados separadamente e excluídos dos totais por tamanho.
 
@@ -248,7 +300,7 @@ uv run python total_camisetas.py -o camisetas.md
 
 ---
 
-## 5. `lista_equipes_especiais.py` — Listar equipes por categoria especial
+## 6. `lista_equipes_especiais.py` — Listar equipes por categoria especial
 
 Lê o `equipes_interif.csv` e classifica as equipes em cinco categorias:
 
@@ -285,7 +337,7 @@ uv run python lista_equipes_especiais.py -o especiais.md
 
 ---
 
-## 6. `gerar_arquivos_boca.py` — Gerar arquivos do BOCA
+## 7. `gerar_arquivos_boca.py` — Gerar arquivos do BOCA
 
 Lê `equipes_interif.csv` e `assets/ifsp_campi.csv` e gera os quatro arquivos de configuração necessários para o [BOCA Online Contest Administrator](https://www.ime.usp.br/~cassio/boca/):
 
@@ -333,7 +385,7 @@ uv run python gerar_arquivos_boca.py --dry-run
 
 ---
 
-## 7. `enviar_credenciais.py` — Enviar credenciais de acesso
+## 8. `enviar_credenciais.py` — Enviar credenciais de acesso
 
 Envia os dados de login do BOCA por email, usando `output/usuarios.txt` como **fonte da verdade** para username e senha. Os endereços de email são lidos do `equipes_interif.csv` e vinculados às equipes pelo nome. Isso garante que as senhas enviadas por email são idênticas às gravadas nos arquivos BOCA — mesmo que o CSV tenha sido alterado após a geração dos arquivos.
 
@@ -371,7 +423,7 @@ uv run python enviar_credenciais.py
 
 ---
 
-## 8. `gerar_etiquetas.py` — Gerar etiquetas de credenciais
+## 9. `gerar_etiquetas.py` — Gerar etiquetas de credenciais
 
 Lê `output/usuarios.txt` (fonte da verdade gerada por `gerar_arquivos_boca.py`) e os endereços de email do `equipes_interif.csv`, e gera um PDF de etiquetas de credenciais por campus — layout 2 colunas × 6 etiquetas por página A4. Cada etiqueta exibe o campus, o nome da equipe, o username e a senha do BOCA.
 
@@ -410,7 +462,7 @@ uv run python gerar_etiquetas.py -o output/etiquetas
 
 ---
 
-## 9. `gerar_placas.py` — Gerar placas de identificação
+## 10. `gerar_placas.py` — Gerar placas de identificação
 
 Lê `output/usuarios.txt` (fonte da verdade gerada por `gerar_arquivos_boca.py`) e os dados das equipes do `equipes_interif.csv`, e gera um PDF de placas de identificação por campus — uma página landscape A4 por equipe, com fundo gradiente colorido. Cada placa exibe o título do evento, os logos, o nome da equipe e o username do BOCA.
 
@@ -449,7 +501,7 @@ uv run python gerar_placas.py -o output/placas
 
 ---
 
-## 10. `coach_aluno_email.py` — Detectar coaches com email de aluno
+## 11. `coach_aluno_email.py` — Detectar coaches com email de aluno
 
 Lê o `equipes_interif.csv` e lista todas as equipes cujo coach (responsável) possui endereço de email com domínio `@aluno.ifsp.edu.br`, indicando um possível cadastro incorreto. A saída é ordenada por campus e nome da equipe.
 
@@ -484,13 +536,14 @@ uv run python coach_aluno_email.py
 | Constante | Usada em | Descrição |
 |-----------|----------|-----------|
 | `TITULO_EVENTO` | todos | Nome completo do evento (ex.: `"IX InterIF — Fase Local"`) |
-| `EMAIL_INTERIF` | `cpf_check`, `inscricoes_atuais`, `enviar_credenciais` | Email da organização |
+| `EMAIL_INTERIF` | `cpf_check`, `duplicatas_participantes`, `inscricoes_atuais`, `enviar_credenciais` | Email da organização |
 | `SALT` / `SECRET_GERAL` | `gerar_arquivos_boca` | Segredos BOCA |
 | `COORD_SUBJECT` / `COORD_PRE` / `COORD_POST` | `inscricoes_atuais` | Email para coordenadores de campus |
 | `RESP_SUBJECT` / `RESP_PRE` / `RESP_POST` | `inscricoes_atuais` | Email para técnicos responsáveis |
 | `SUMMARY_SUBJECT` / `SUMMARY_PRE` / `SUMMARY_POST` | `inscricoes_atuais` | Email de resumo de inscrições |
 | `NO_TEAMS_SUBJECT` / `NO_TEAMS_BODY` | `inscricoes_atuais` | Email para coordenadores de campi sem equipes |
 | `NOTIFY_SUBJECT` / `NOTIFY_BODY` | `cpf_check` | Notificação de CPF inválido |
+| `DUPLICATA_SUBJECT` / `DUPLICATA_BODY` | `duplicatas_participantes` | Notificação de aluno em múltiplas equipes |
 | `CRED_SUBJECT_PREFIX` | `enviar_credenciais` | Prefixo do assunto dos emails de credenciais |
 | `ETIQ_FONTE_MONO` | `gerar_etiquetas` | Nome do arquivo de fonte monospaced (em `assets/`) |
 | `ETIQ_SUBJECT` | `gerar_etiquetas` | Assunto do email com as etiquetas em anexo |
@@ -504,7 +557,7 @@ uv run python coach_aluno_email.py
 | `PLACA_SUBJECT` | `gerar_placas` | Assunto do email com as placas em anexo |
 | `PLACA_BODY_TEMPLATE` | `gerar_placas` | Corpo do email (placeholders: `{nome}`, `{campus}`) |
 
-Os textos de `*_PRE` aceitam placeholders preenchidos em runtime: `{nome}` (primeiro nome do destinatário) e `{campus}` (apenas em `COORD_PRE`). Os textos de `NOTIFY_BODY` aceitam `{nome}`, `{cpf}` e `{interif_email}`. Os templates `ETIQ_BODY_TEMPLATE` e `PLACA_BODY_TEMPLATE` aceitam `{nome}` e `{campus}`.
+Os textos de `*_PRE` aceitam placeholders preenchidos em runtime: `{nome}` (primeiro nome do destinatário) e `{campus}` (apenas em `COORD_PRE`). Os textos de `NOTIFY_BODY` aceitam `{nome}`, `{cpf}` e `{interif_email}`. O texto de `DUPLICATA_BODY` aceita `{nome}`, `{criterio}` e `{equipes_detalhe}`. Os templates `ETIQ_BODY_TEMPLATE` e `PLACA_BODY_TEMPLATE` aceitam `{nome}` e `{campus}`.
 
 ---
 

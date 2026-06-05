@@ -73,6 +73,24 @@ NOTIFY_BODY = (
     + f"Organização {TITULO_EVENTO}"
 )
 
+# ── Participante em múltiplas equipes (duplicatas_participantes.py) ───────────
+# Placeholders: {nome}, {criterio}, {equipes_detalhe}  (preenchidos em runtime)
+
+DUPLICATA_SUBJECT = f"[ATENÇÃO] Participante em múltiplas equipes — {TITULO_EVENTO}"
+DUPLICATA_BODY = (
+    BANNER
+    + "Prezados,\n\n"
+    + f"Durante a verificação das inscrições do {TITULO_EVENTO}, identificamos que "
+    + "o(a) participante **{nome}** consta inscrito(a) em mais de uma equipe "
+    + "(critério de detecção: {criterio}).\n\n"
+    + "Equipes em que o(a) participante aparece:\n\n"
+    + "{equipes_detalhe}\n\n"
+    + "Pedimos que respondam este e-mail informando qual é a equipe correta em que "
+    + "o(a) participante deve permanecer, para que possamos corrigir as inscrições.\n\n"
+    + "Atenciosamente,\n"
+    + f"Organização {TITULO_EVENTO}"
+)
+
 # ── Credenciais de acesso (enviar_credenciais.py) ─────────────────────────────
 
 CRED_SUBJECT_PREFIX = f"Credenciais de acesso — {TITULO_EVENTO}"
