@@ -125,11 +125,27 @@ def format_team_line_resp(equipe: dict) -> str:
     return f"- {equipe['nome']}: {parts}"
 
 
-def send_coordinator_emails(por_campus: dict, dry_run: bool) -> int:
+def format_team_detail_coord(equipe: dict) -> str:
+    lines = [f"- Equipe {equipe['nome']}", f"   Coach: {equipe['responsavel']}"]
+    lines += [f"  {p}" for p in equipe["participantes"]]
+    return "\n".join(lines)
+
+
+def format_team_detail_resp(equipe: dict) -> str:
+    lines = [f"- Equipe {equipe['nome']}"]
+    lines += [f"  {p}" for p in equipe["participantes"]]
+    return "\n".join(lines)
+
+
+def send_coordinator_emails(por_campus: dict, dry_run: bool, detail: bool = False) -> int:
     print("\n=== Emails para coordenadores de campus ===")
     count = 0
     for email, data in por_campus.items():
-        lines = "\n".join(format_team_line_coord(e) for e in data["equipes"])
+        if detail:
+            separator = "\n\n"
+            lines = separator.join(format_team_detail_coord(e) for e in data["equipes"])
+        else:
+            lines = "\n".join(format_team_line_coord(e) for e in data["equipes"])
         body = (
             COORD_PRE.format(nome=first_name(data["nome"]), campus=data["campus"])
             + "\n"
@@ -196,11 +212,15 @@ def send_no_teams_summary_email(no_teams_coordinators: list[dict], dry_run: bool
     send_email(SUMMARY_TO, f"{NO_TEAMS_SUBJECT} — resumo {_TIMESTAMP}", body, dry_run=dry_run)
 
 
-def send_advisor_emails(por_resp: dict, dry_run: bool) -> int:
+def send_advisor_emails(por_resp: dict, dry_run: bool, detail: bool = False) -> int:
     print("\n=== Emails para responsáveis pelas equipes ===")
     count = 0
     for email, data in por_resp.items():
-        lines = "\n".join(format_team_line_resp(e) for e in data["equipes"])
+        if detail:
+            separator = "\n\n"
+            lines = separator.join(format_team_detail_resp(e) for e in data["equipes"])
+        else:
+            lines = "\n".join(format_team_line_resp(e) for e in data["equipes"])
         body = RESP_PRE.format(nome=first_name(data["nome"])) + "\n" + lines + "\n" + RESP_POST
         send_email(email, f"{RESP_SUBJECT} {_TIMESTAMP}", body, dry_run=dry_run)
         count += 1
@@ -235,6 +255,12 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Simula o envio sem disparar emails",
     )
+    parser.add_argument(
+        "--detail",
+        "-d",
+        action="store_true",
+        help="Lista cada equipe com coach e participantes em linhas separadas",
+    )
     return parser.parse_args()
 
 
@@ -259,8 +285,8 @@ def main() -> None:
     por_campus = group_by_coordinator(teams)
     por_resp = group_by_advisor(teams)
 
-    n_coord = send_coordinator_emails(por_campus, args.dry_run)
-    n_resp = send_advisor_emails(por_resp, args.dry_run)
+    n_coord = send_coordinator_emails(por_campus, args.dry_run, detail=args.detail)
+    n_resp = send_advisor_emails(por_resp, args.dry_run, detail=args.detail)
     send_summary_email(por_campus, args.dry_run)
 
     print(
