@@ -125,26 +125,21 @@ source = { editable = "." }
 dependencies = [
     { name = "cpf" },
     { name = "pillow" },
+    { name = "pytest" },
     { name = "reportlab" },
     { name = "ruff" },
     { name = "tabulate" },
-]
-
-[package.optional-dependencies]
-dev = [
-    { name = "pytest" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "cpf", specifier = ">=3.0" },
     { name = "pillow", specifier = ">=10.0" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
+    { name = "pytest", specifier = ">=8.0" },
     { name = "reportlab", specifier = ">=4.0" },
     { name = "ruff", specifier = ">=0.4" },
     { name = "tabulate", specifier = ">=0.9" },
 ]
-provides-extras = ["dev"]
 
 [[package]]
 name = "packaging"
