@@ -11,6 +11,7 @@ etiquetas/
 placas/
 equipes_interif.csv
 equipes_interif_*.csv
+coordenadores_interif.csv
 
 # Fontes (arquivos binários; veja assets/FONTES.md para obter as fontes)
 assets/*.ttf

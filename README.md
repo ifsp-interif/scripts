@@ -22,6 +22,8 @@ equipes_interif.py        ← gera equipes_interif.csv a partir das planilhas
        │
        ├─► inscricoes_atuais.py       ← confirma inscrições (emails de boas-vindas)
        │
+       ├─► coach_aluno_email.py        ← detecta coaches com email @aluno.ifsp.edu.br
+       │
        ├─► total_camisetas.py         ← contagem de camisetas por tamanho e campus
        │
        ├─► lista_equipes_especiais.py ← lista equipes por categoria especial
@@ -443,6 +445,34 @@ uv run python gerar_placas.py --send --dry-run
 
 # Salvar em outro diretório
 uv run python gerar_placas.py -o output/placas
+```
+
+---
+
+## 10. `coach_aluno_email.py` — Detectar coaches com email de aluno
+
+Lê o `equipes_interif.csv` e lista todas as equipes cujo coach (responsável) possui endereço de email com domínio `@aluno.ifsp.edu.br`, indicando um possível cadastro incorreto. A saída é ordenada por campus e nome da equipe.
+
+### Uso
+
+```bash
+uv run python coach_aluno_email.py
+```
+
+### Opções
+
+| Opção | Descrição |
+|-------|-----------|
+| `--csv ARQUIVO` | CSV de equipes (padrão: `equipes_interif.csv`) |
+
+### Exemplo de saída
+
+```
+4 equipe(s) com coach de email @aluno.ifsp.edu.br:
+
+  Campus : Birigui
+  Equipe : 404 team not found
+  Coach  : Fulano de Tal <fulano@aluno.ifsp.edu.br>
 ```
 
 ---
