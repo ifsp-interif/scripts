@@ -47,42 +47,47 @@ equipes_interif.py        ← gera equipes_interif.csv a partir das planilhas
 # 1. Gerar o CSV a partir das planilhas
 uv run python equipes_interif.py --campi <ID_CAMPI> --teams <ID_EQUIPES>
 
-# 2. Verificar alunos inscritos em mais de uma equipe
+# 2. Padronizar nomes de cursos (processo iterativo até o agrupamento ficar bom)
+uv run python lista_cursos.py --gerar-mapa   # gera cursos_mapa.csv — edite antes de continuar
+uv run python lista_cursos.py --aplicar --dry-run
+uv run python lista_cursos.py --aplicar
+
+# 3. Verificar alunos inscritos em mais de uma equipe
 uv run python duplicatas_participantes.py
 uv run python duplicatas_participantes.py --notificar --dry-run   # revisar antes de enviar
 uv run python duplicatas_participantes.py --notificar             # notificar os envolvidos
 
-# 3. Validar os CPFs e corrigir eventuais inválidos
+# 4. Validar os CPFs e corrigir eventuais inválidos
 uv run python cpf_check.py --invalidos
 uv run python cpf_check.py --notificar --dry-run   # revisar antes de enviar
 uv run python cpf_check.py --notificar             # notificar os inválidos
 
-# 4. Enviar os emails de confirmação de inscrição
+# 5. Enviar os emails de confirmação de inscrição
 uv run python inscricoes_atuais.py
 
-# 5. Verificar pedidos de camiseta
+# 6. Verificar pedidos de camiseta
 uv run python total_camisetas.py
 uv run python total_camisetas.py -o camisetas.md   # exportar como Markdown
 
-# 5b. Listar equipes especiais (ensino médio, femininas, mistas)
+# 6b. Listar equipes especiais (ensino médio, femininas, mistas)
 uv run python lista_equipes_especiais.py
 uv run python lista_equipes_especiais.py -o especiais.md   # exportar como Markdown
 
-# 6. Gerar os arquivos de configuração do BOCA
+# 7. Gerar os arquivos de configuração do BOCA
 uv run python gerar_arquivos_boca.py
 # ou, em ambiente de teste:
 uv run python gerar_arquivos_boca.py --dry-run
 
-# 7. Enviar credenciais de acesso por email
+# 8. Enviar credenciais de acesso por email
 uv run python enviar_credenciais.py --dry-run      # revisar antes de enviar
 uv run python enviar_credenciais.py                # disparar os emails
 
-# 8. Gerar etiquetas de credenciais (uma por equipe, agrupadas por campus)
+# 9. Gerar etiquetas de credenciais (uma por equipe, agrupadas por campus)
 uv run python gerar_etiquetas.py --dry-run            # gera PDFs, simula envio
 uv run python gerar_etiquetas.py                      # gera PDFs em etiquetas/
 uv run python gerar_etiquetas.py --send               # gera PDFs e envia ao coordenador
 
-# 9. Gerar placas de identificação (uma por equipe, agrupadas por campus)
+# 10. Gerar placas de identificação (uma por equipe, agrupadas por campus)
 uv run python gerar_placas.py --dry-run               # gera PDFs, simula envio
 uv run python gerar_placas.py                         # gera PDFs em placas/
 uv run python gerar_placas.py --send                  # gera PDFs e envia ao coordenador
@@ -501,7 +506,47 @@ uv run python gerar_placas.py -o output/placas
 
 ---
 
-## 11. `coach_aluno_email.py` — Detectar coaches com email de aluno
+## 11. `lista_cursos.py` — Padronizar nomes de cursos
+
+Normaliza a coluna `Nome do curso` do `equipes_interif.csv`, cujo preenchimento livre pelos participantes gera muitas variantes do mesmo curso (diferenças de caixa, abreviações, erros de digitação).
+
+O processo é iterativo: rode `--gerar-mapa`, edite o arquivo gerado até ficar satisfeito com os agrupamentos, rode `--aplicar`. Repita se necessário.
+
+### Passada 1 — gerar o mapeamento automático
+
+```bash
+uv run python lista_cursos.py --gerar-mapa
+```
+
+Usa `rapidfuzz` (similaridade mínima de 80) para agrupar nomes parecidos e escolhe automaticamente o nome canônico de cada grupo (o mais frequente; em empate, o mais longo). Gera `cursos_mapa.csv` com duas colunas: `original` e `canonico`, ordenado pelo nome canônico para facilitar a revisão.
+
+**Edite `cursos_mapa.csv`** corrigindo a coluna `canonico` onde o agrupamento automático errou — é comum confundir cursos distintos com nomes similares (ex.: "Técnico em Informática" e "Técnico em Informática para Internet").
+
+### Passada 2 — aplicar as correções
+
+```bash
+# Conferir antes de gravar
+uv run python lista_cursos.py --aplicar --dry-run
+
+# Gravar as substituições no equipes_interif.csv
+uv run python lista_cursos.py --aplicar
+```
+
+### Opções
+
+| Opção | Descrição |
+|-------|-----------|
+| `--gerar-mapa` | Gera `cursos_mapa.csv` com agrupamento automático |
+| `--aplicar` | Aplica `cursos_mapa.csv` ao CSV de equipes |
+| `--dry-run` | (com `--aplicar`) Lista as substituições sem gravar |
+| `--csv ARQUIVO` | CSV de equipes (padrão: `equipes_interif.csv`) |
+| `--mapa ARQUIVO` | Arquivo de mapeamento (padrão: `cursos_mapa.csv`) |
+
+> `cursos_mapa.csv` é um arquivo derivado e está no `.gitignore`.
+
+---
+
+## 12. `coach_aluno_email.py` — Detectar coaches com email de aluno
 
 Lê o `equipes_interif.csv` e lista todas as equipes cujo coach (responsável) possui endereço de email com domínio `@aluno.ifsp.edu.br`, indicando um possível cadastro incorreto. A saída é ordenada por campus e nome da equipe.
 

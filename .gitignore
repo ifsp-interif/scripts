@@ -5,6 +5,9 @@ __pycache__/
 *.pyo
 .pytest_cache/
 
+# Mapa de normalização de cursos (gerado por lista_cursos.py --gerar-mapa)
+cursos_mapa.csv
+
 # Saídas geradas pelos scripts
 output/
 etiquetas/

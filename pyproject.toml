@@ -19,6 +19,8 @@ dependencies = [
     "pillow>=10.0",
     # lista_equipes_especiais.py
     "tabulate>=0.9",
+    # normalização de nomes de cursos
+    "rapidfuzz>=3.0",
     # testes
     "pytest>=8.0",
 ]
