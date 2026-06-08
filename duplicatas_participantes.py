@@ -19,6 +19,7 @@ from tabulate import tabulate
 
 from config import DUPLICATA_BODY, DUPLICATA_SUBJECT, EMAIL_INTERIF, TITULO_EVENTO
 from email_utils import send_email
+from interif_core import CAMPI_FILE, load_campi
 
 CSV_FILE = Path(__file__).parent / "equipes_interif.csv"
 
@@ -40,6 +41,8 @@ class Ocorrencia:
     coord_email: str
     coach_nome: str
     coach_email: str
+    sigla: str = ""  # sigla do campus (ex.: "SJC")
+    inscricao_id: int = 0  # índice da linha no CSV — distingue inscrições com mesmo nome de equipe
 
 
 @dataclass
@@ -87,16 +90,19 @@ def _cpf_from_raw(raw: str) -> str:
 # ── Leitura do CSV ────────────────────────────────────────────────────────────
 
 
-def load_ocorrencias(csv_path: Path) -> list[Ocorrencia]:
+def load_ocorrencias(csv_path: Path, campi: dict[str, str]) -> list[Ocorrencia]:
     """Extrai todos os participantes (coach + até 3 alunos) de cada equipe."""
     ocorrencias: list[Ocorrencia] = []
 
     with open(csv_path, newline="", encoding="utf-8-sig") as f:
-        for row in csv.DictReader(f):
+        for inscricao_id, row in enumerate(csv.DictReader(f)):
             equipe = row.get("Nome da Equipe", "").strip()
             campus = row.get("Campus", "").strip()
             if not equipe or not campus:
                 continue
+
+            cidade = campus.removeprefix("Campus ").strip()
+            sigla = campi.get(cidade, "")
 
             coord_email = _norm_email(row.get("Email do Coordenador do Campus", ""))
             coach_nome = row.get("Nome do Responsável pela Equipe", "").strip()
@@ -122,6 +128,8 @@ def load_ocorrencias(csv_path: Path) -> list[Ocorrencia]:
                         coord_email=coord_email,
                         coach_nome=coach_nome,
                         coach_email=coach_email,
+                        sigla=sigla,
+                        inscricao_id=inscricao_id,
                     )
                 )
 
@@ -150,7 +158,7 @@ def _conflitos_por_chave(
     return {
         chave: ocs
         for chave, ocs in index.items()
-        if len({oc.equipe for oc in ocs}) > 1
+        if len({oc.inscricao_id for oc in ocs}) > 1
     }
 
 
@@ -184,11 +192,11 @@ def detectar_conflitos(ocorrencias: list[Ocorrencia]) -> list[Conflito]:
             c.chave_cpf = cpf
             c.criterio = "e-mail e CPF"
             # Adiciona ocorrências não duplicadas
-            equipes_existentes = {oc.equipe for oc in c.ocorrencias}
+            ids_existentes = {oc.inscricao_id for oc in c.ocorrencias}
             for oc in ocs:
-                if oc.equipe not in equipes_existentes:
+                if oc.inscricao_id not in ids_existentes:
                     c.ocorrencias.append(oc)
-                    equipes_existentes.add(oc.equipe)
+                    ids_existentes.add(oc.inscricao_id)
         else:
             # Conflito detectado apenas por CPF; usa chave sintética para não colidir
             conflitos[f"cpf:{cpf}"] = Conflito(
@@ -208,9 +216,10 @@ def detectar_conflitos(ocorrencias: list[Ocorrencia]) -> list[Conflito]:
 def _detalhe_equipes(conflito: Conflito) -> str:
     linhas: list[str] = []
     for oc in conflito.ocorrencias:
+        equipe_label = f"{oc.equipe} ({oc.sigla})" if oc.sigla else oc.equipe
         linhas.append(
             f"  - Campus : {oc.campus}\n"
-            f"    Equipe : {oc.equipe}\n"
+            f"    Equipe : {equipe_label}\n"
             f"    Papel  : {oc.papel}\n"
             f"    Coach  : {oc.coach_nome} <{oc.coach_email}>"
         )
@@ -220,7 +229,10 @@ def _detalhe_equipes(conflito: Conflito) -> str:
 def render_table(conflitos: list[Conflito]) -> None:
     rows: list[list[str]] = []
     for c in conflitos:
-        equipes = ", ".join(oc.equipe for oc in c.ocorrencias)
+        equipes = ", ".join(
+            f"{oc.equipe} ({oc.sigla})" if oc.sigla else oc.equipe
+            for oc in c.ocorrencias
+        )
         ident = c.chave_email or c.cpf_fmt
         rows.append([c.nome, ident, c.criterio, equipes])
 
@@ -325,7 +337,8 @@ def main() -> None:
     print(f"Verificador de duplicatas — {TITULO_EVENTO}")
     print(f"Arquivo: {csv_path.resolve()}\n")
 
-    ocorrencias = load_ocorrencias(csv_path)
+    campi = load_campi(CAMPI_FILE)
+    ocorrencias = load_ocorrencias(csv_path, campi)
     conflitos = detectar_conflitos(ocorrencias)
 
     n_equipes = len({oc.equipe for oc in ocorrencias})
