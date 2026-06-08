@@ -21,6 +21,10 @@ dependencies = [
     "tabulate>=0.9",
     # normalização de nomes de cursos
     "rapidfuzz>=3.0",
+    # gráficos de distribuição
+    "matplotlib>=3.8",
+    # templates de mala direta
+    "jinja2>=3.0",
     # testes
     "pytest>=8.0",
 ]
@@ -35,6 +39,7 @@ interif-camisetas    = "total_camisetas:main"          # python total_camisetas.
 interif-etiquetas    = "gerar_etiquetas:main"             # python gerar_etiquetas.py
 interif-placas       = "gerar_placas:main"                # python gerar_placas.py
 interif-equipes-especiais = "lista_equipes_especiais:main" # python lista_equipes_especiais.py
+interif-mensagem          = "enviar_mensagem:main"          # python enviar_mensagem.py
 
 # ── Hatchling: inclui os scripts avulsos (sem __init__.py) ───────────────────
 [tool.hatch.build.targets.wheel]

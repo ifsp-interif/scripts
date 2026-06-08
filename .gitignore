@@ -19,6 +19,7 @@ coordenadores_interif.csv
 # Fontes (arquivos binários; veja assets/FONTES.md para obter as fontes)
 assets/*.ttf
 assets/*.otf
+distribuicao_equipes.png
 
 # Arquivos de configuração de segredos
 config_local.py
