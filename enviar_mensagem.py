@@ -20,6 +20,7 @@ Variáveis disponíveis no template:
 """
 
 import argparse
+import signal
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -107,7 +108,7 @@ def iter_participantes(teams: list[dict]):
                 "campus": t["campus"],
                 "evento": TITULO_EVENTO,
                 "email_organizacao": EMAIL_INTERIF,
-                "coord_nome": "",
+                "coord_nome": t.get("coord_nome", ""),
                 "coach": t["resp_nome"],
                 "equipe": t["nome_equipe"],
                 "equipes": [eq_ctx],
@@ -263,7 +264,7 @@ def _send_participantes_por_equipe(
             "campus": t["campus"],
             "evento": TITULO_EVENTO,
             "email_organizacao": EMAIL_INTERIF,
-            "coord_nome": "",
+            "coord_nome": t.get("coord_nome", ""),
             "coach": t["resp_nome"],
             "equipe": t["nome_equipe"],
             "equipes": [eq_ctx],
@@ -352,6 +353,9 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    # Encerra silenciosamente se a saída for cortada por um pager (ex.: | bat, | less, | head).
+    signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+
     args = parse_args()
 
     if not (args.coordenadores or args.coaches or args.participantes):
