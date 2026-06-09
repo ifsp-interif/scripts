@@ -1,10 +1,10 @@
 # Scripts INTERIF
 
-Scripts Python para organização do InterIF: geração de CSV, validação de CPFs, emails de confirmação de inscrição, geração de arquivos BOCA e envio de credenciais de acesso.
+Scripts Python para organização do InterIF: geração de CSV, validação de CPFs, emails de confirmação de inscrição, geração de arquivos BOCA/NOCA e envio de credenciais de acesso.
 
 ## Pré-requisitos
 
-- O CLI [`gws`](https://github.com/googleworkspace/cli) instalado e autenticado com uma conta com acesso às planilhas e ao Gmail (necessário para `equipes_interif.py`, `cpf_check.py`, `inscricoes_atuais.py` e `enviar_credenciais.py`).
+- O CLI [`gws`](https://github.com/googleworkspace/cli) instalado e autenticado com uma conta com acesso às planilhas e ao Gmail (necessário para `equipes_interif.py`, `cpf_check.py`, `inscricoes_atuais.py`, `enviar_mensagem.py` e `enviar_credenciais.py`).
 - [`uv`](https://docs.astral.sh/uv/) instalado (gerencia o ambiente virtual e as dependências declaradas em `pyproject.toml`).
 
 ```bash
@@ -16,31 +16,46 @@ uv sync   # cria o .venv e instala as dependências na primeira vez
 ## Fluxo completo
 
 ```
-equipes_interif.py        ← gera equipes_interif.csv a partir das planilhas
+equipes_interif.py           ← gera equipes_interif.csv a partir das planilhas
        │
-       ├─► cpf_check.py               ← valida CPFs; notifica inválidos por email
+       ├─► lista_cursos.py           ← normaliza nomes de cursos (processo iterativo)
+       │         │
+       │         └─► verifica_matriculas.py  ← cruza prontuários com alunos matriculados;
+       │                   │                    gera matriculados.csv
+       │                   │
+       │                   └─► lista_cursos.py --enriquecer  ← substitui nomes de cursos
+       │                                                         pelos nomes oficiais
        │
-       ├─► inscricoes_atuais.py       ← confirma inscrições (emails de boas-vindas)
-       │
-       ├─► coach_aluno_email.py        ← detecta coaches com email @aluno.ifsp.edu.br
+       ├─► coach_aluno_email.py      ← detecta coaches com email @aluno.ifsp.edu.br
        │
        ├─► duplicatas_participantes.py ← detecta alunos inscritos em mais de uma equipe
        │
-       ├─► total_camisetas.py         ← contagem de camisetas por tamanho e campus
+       ├─► cpf_check.py              ← valida CPFs; notifica inválidos por email
        │
-       ├─► lista_equipes_especiais.py ← lista equipes por categoria especial
+       ├─► inscricoes_atuais.py      ← confirma inscrições (emails de boas-vindas)
        │
-       └─► gerar_arquivos_boca.py ← gera usuarios.txt, INTERIF.toml, score.sep,
-                │                    secret_interif.toml em output/
-                │
-                ├─► enviar_credenciais.py ← envia login/senha por email
-                │     (lê output/usuarios.txt como fonte da verdade)
-                │
-                ├─► gerar_etiquetas.py ← gera etiquetas de credenciais em PDF
-                │     (lê output/usuarios.txt como fonte da verdade)
-                │
-                └─► gerar_placas.py ← gera placas de identificação em PDF
-                      (lê output/usuarios.txt como fonte da verdade)
+       ├─► enviar_mensagem.py        ← mala direta genérica com templates Jinja2
+       │
+       ├─► total_camisetas.py        ← contagem de camisetas por tamanho e campus
+       │
+       ├─► graficos_equipes.py       ← gera gráficos e lista equipes especiais
+       │
+       ├─► equipes_html.py           ← gera tabela HTML das equipes (CPFs mascarados)
+       │
+       ├─► gerar_arquivos_boca.py    ← gera usuarios.txt, INTERIF.toml, score.sep,
+       │         │                      secret_interif.toml em output/
+       │         │
+       │         ├─► enviar_credenciais.py ← envia login/senha por email
+       │         │     (lê output/usuarios.txt como fonte da verdade)
+       │         │
+       │         ├─► gerar_etiquetas.py ← gera etiquetas de credenciais em PDF
+       │         │     (lê output/usuarios.txt como fonte da verdade)
+       │         │
+       │         └─► gerar_placas.py ← gera placas de identificação em PDF
+       │               (lê output/usuarios.txt como fonte da verdade)
+       │
+       └─► gerar_arquivos_noca.py    ← alternativa ao BOCA; gera usuarios_noca.csv
+                                        ou usuarios_noca.json
 ```
 
 ```bash
@@ -52,42 +67,64 @@ uv run python lista_cursos.py --gerar-mapa   # gera cursos_mapa.csv — edite an
 uv run python lista_cursos.py --aplicar --dry-run
 uv run python lista_cursos.py --aplicar
 
-# 3. Verificar alunos inscritos em mais de uma equipe
+# 3. Verificar situação de matrícula dos participantes
+uv run python verifica_matriculas.py --graduacao alunos_grad.csv --medio alunos_medio.csv
+uv run python verifica_matriculas.py --graduacao alunos_grad.csv --medio alunos_medio.csv --irregulares
+
+# 3b. Enriquecer nomes de cursos com os nomes oficiais (usa matriculados.csv gerado no passo 3)
+uv run python lista_cursos.py --enriquecer --dry-run
+uv run python lista_cursos.py --enriquecer
+
+# 4. Verificar coaches com email @aluno.ifsp.edu.br
+uv run python coach_aluno_email.py
+
+# 5. Verificar alunos inscritos em mais de uma equipe
 uv run python duplicatas_participantes.py
 uv run python duplicatas_participantes.py --notificar --dry-run   # revisar antes de enviar
 uv run python duplicatas_participantes.py --notificar             # notificar os envolvidos
 
-# 4. Validar os CPFs e corrigir eventuais inválidos
+# 6. Validar os CPFs e corrigir eventuais inválidos
 uv run python cpf_check.py --invalidos
 uv run python cpf_check.py --notificar --dry-run   # revisar antes de enviar
 uv run python cpf_check.py --notificar             # notificar os inválidos
 
-# 5. Enviar os emails de confirmação de inscrição
+# 7. Enviar os emails de confirmação de inscrição
 uv run python inscricoes_atuais.py
 
-# 6. Verificar pedidos de camiseta
+# 7b. Mala direta com template Jinja2 (comunicação avulsa)
+uv run python enviar_mensagem.py TEMPLATE.j2 --assunto "Assunto" --coordenadores --dry-run
+
+# 8. Verificar pedidos de camiseta
 uv run python total_camisetas.py
 uv run python total_camisetas.py -o camisetas.md   # exportar como Markdown
 
-# 6b. Listar equipes especiais (ensino médio, femininas, mistas)
-uv run python lista_equipes_especiais.py
-uv run python lista_equipes_especiais.py -o especiais.md   # exportar como Markdown
+# 9. Gerar gráficos e listar equipes especiais (ensino médio, femininas, mistas)
+uv run python graficos_equipes.py
+uv run python graficos_equipes.py -o especiais.md   # exportar lista como Markdown
 
-# 7. Gerar os arquivos de configuração do BOCA
+# 9b. Gerar tabela HTML das equipes para divulgação
+uv run python equipes_html.py
+uv run python equipes_html.py -o equipes.html
+
+# 10. Gerar os arquivos de configuração do BOCA
 uv run python gerar_arquivos_boca.py
 # ou, em ambiente de teste:
 uv run python gerar_arquivos_boca.py --dry-run
 
-# 8. Enviar credenciais de acesso por email
+# 10b. Alternativa: gerar arquivo de importação para o NOCA
+uv run python gerar_arquivos_noca.py
+uv run python gerar_arquivos_noca.py --formato json
+
+# 11. Enviar credenciais de acesso por email
 uv run python enviar_credenciais.py --dry-run      # revisar antes de enviar
 uv run python enviar_credenciais.py                # disparar os emails
 
-# 9. Gerar etiquetas de credenciais (uma por equipe, agrupadas por campus)
+# 12. Gerar etiquetas de credenciais (uma por equipe, agrupadas por campus)
 uv run python gerar_etiquetas.py --dry-run            # gera PDFs, simula envio
 uv run python gerar_etiquetas.py                      # gera PDFs em etiquetas/
 uv run python gerar_etiquetas.py --send               # gera PDFs e envia ao coordenador
 
-# 10. Gerar placas de identificação (uma por equipe, agrupadas por campus)
+# 13. Gerar placas de identificação (uma por equipe, agrupadas por campus)
 uv run python gerar_placas.py --dry-run               # gera PDFs, simula envio
 uv run python gerar_placas.py                         # gera PDFs em placas/
 uv run python gerar_placas.py --send                  # gera PDFs e envia ao coordenador
@@ -134,7 +171,99 @@ Equipes sem coordenador de campus correspondente são listadas no terminal ao fi
 
 ---
 
-## 2. `duplicatas_participantes.py` — Detectar alunos em múltiplas equipes
+## 2. `lista_cursos.py` — Padronizar nomes de cursos
+
+Normaliza a coluna `Nome do curso` do `equipes_interif.csv`, cujo preenchimento livre pelos participantes gera muitas variantes do mesmo curso (diferenças de caixa, abreviações, erros de digitação).
+
+O processo é iterativo: rode `--gerar-mapa`, edite o arquivo gerado até ficar satisfeito com os agrupamentos, rode `--aplicar`. Repita se necessário. Ao final, use `--enriquecer` para substituir os nomes pelos oficiais do sistema acadêmico (requer `matriculados.csv` gerado por `verifica_matriculas.py`).
+
+### Passada 1 — gerar o mapeamento automático
+
+```bash
+uv run python lista_cursos.py --gerar-mapa
+```
+
+Usa `rapidfuzz` (similaridade mínima de 80) para agrupar nomes parecidos e escolhe automaticamente o nome canônico de cada grupo (o mais frequente; em empate, o mais longo). Gera `cursos_mapa.csv` com duas colunas: `original` e `canonico`, ordenado pelo nome canônico para facilitar a revisão.
+
+**Edite `cursos_mapa.csv`** corrigindo a coluna `canonico` onde o agrupamento automático errou — é comum confundir cursos distintos com nomes similares (ex.: "Técnico em Informática" e "Técnico em Informática para Internet").
+
+### Passada 2 — aplicar as correções
+
+```bash
+# Conferir antes de gravar
+uv run python lista_cursos.py --aplicar --dry-run
+
+# Gravar as substituições no equipes_interif.csv
+uv run python lista_cursos.py --aplicar
+```
+
+### Passada 3 — enriquecer com nomes oficiais
+
+Requer `matriculados.csv` gerado por `verifica_matriculas.py`. Busca cada participante pelo prontuário e substitui o nome do curso pelo nome oficial extraído do sistema acadêmico.
+
+```bash
+# Conferir antes de gravar
+uv run python lista_cursos.py --enriquecer --dry-run
+
+# Gravar as substituições no equipes_interif.csv
+uv run python lista_cursos.py --enriquecer
+```
+
+### Opções
+
+| Opção | Descrição |
+|-------|-----------|
+| `--gerar-mapa` | Gera `cursos_mapa.csv` com agrupamento automático |
+| `--aplicar` | Aplica `cursos_mapa.csv` ao CSV de equipes |
+| `--enriquecer` | Substitui nomes de cursos pelos nomes oficiais de `matriculados.csv` |
+| `--dry-run` | (com `--aplicar` ou `--enriquecer`) Lista as substituições sem gravar |
+| `--csv ARQUIVO` | CSV de equipes (padrão: `equipes_interif.csv`) |
+| `--mapa ARQUIVO` | Arquivo de mapeamento (padrão: `cursos_mapa.csv`) |
+| `--matriculados ARQUIVO` | CSV de matriculados (padrão: `matriculados.csv`) |
+
+> `cursos_mapa.csv` é um arquivo derivado e está no `.gitignore`.
+
+---
+
+## 3. `verifica_matriculas.py` — Verificar situação de matrícula
+
+Cruza os prontuários dos participantes inscritos no `equipes_interif.csv` com as listas de alunos matriculados exportadas do sistema acadêmico (uma para graduação, outra para ensino médio). Classifica cada participante como **Regular** (prontuário encontrado na lista de matriculados) ou **Irregular** (prontuário não encontrado).
+
+Também gera `matriculados.csv` com todos os alunos matriculados consolidados, que é consumido pela passada `--enriquecer` do `lista_cursos.py`.
+
+### Uso
+
+```bash
+uv run python verifica_matriculas.py --graduacao alunos_grad.csv --medio alunos_medio.csv
+```
+
+### Opções
+
+| Opção | Atalho | Descrição |
+|-------|--------|-----------|
+| `--graduacao ARQUIVO` | | CSV de alunos da graduação (obrigatório) |
+| `--medio ARQUIVO` | | CSV de alunos do ensino médio (obrigatório) |
+| `--input ARQUIVO` | `-i` | CSV de equipes (padrão: `equipes_interif.csv`) |
+| `--matriculados ARQUIVO` | `-m` | CSV consolidado de saída (padrão: `matriculados.csv`) |
+| `--output ARQUIVO` | `-o` | Relatório de saída (padrão: `alunos_irregulares.txt`) |
+| `--irregulares` | | Exibe apenas participantes com situação Irregular |
+
+### Exemplos
+
+```bash
+# Relatório completo (regulares e irregulares)
+uv run python verifica_matriculas.py --graduacao alunos_grad.csv --medio alunos_medio.csv
+
+# Apenas os irregulares
+uv run python verifica_matriculas.py --graduacao alunos_grad.csv --medio alunos_medio.csv --irregulares
+
+# Salvar relatório em outro arquivo
+uv run python verifica_matriculas.py --graduacao alunos_grad.csv --medio alunos_medio.csv -o relatorio.txt
+```
+
+---
+
+## 4. `duplicatas_participantes.py` — Detectar alunos em múltiplas equipes
 
 Lê o `equipes_interif.csv` e verifica se algum aluno (participante 1, 2 ou 3) está inscrito em mais de uma equipe, usando **e-mail** e **CPF** como critérios de identificação independentes. Coaches não são verificados, pois podem ser responsáveis por múltiplas equipes.
 
@@ -179,7 +308,7 @@ uv run python duplicatas_participantes.py --notificar
 
 ---
 
-## 3. `cpf_check.py` — Validar CPFs
+## 5. `cpf_check.py` — Validar CPFs
 
 Lê o `equipes_interif.csv`, extrai e valida os CPFs de responsáveis (coaches) e participantes (alunos) usando o algoritmo módulo 11 oficial. Exibe uma lista ordenada por campus e pode notificar por email as pessoas com CPF inválido.
 
@@ -237,7 +366,35 @@ uv run python cpf_check.py --notificar
 
 ---
 
-## 4. `inscricoes_atuais.py` — Enviar emails de confirmação
+## 6. `coach_aluno_email.py` — Detectar coaches com email de aluno
+
+Lê o `equipes_interif.csv` e lista todas as equipes cujo coach (responsável) possui endereço de email com domínio `@aluno.ifsp.edu.br`, indicando um possível cadastro incorreto. A saída é ordenada por campus e nome da equipe.
+
+### Uso
+
+```bash
+uv run python coach_aluno_email.py
+```
+
+### Opções
+
+| Opção | Descrição |
+|-------|-----------|
+| `--csv ARQUIVO` | CSV de equipes (padrão: `equipes_interif.csv`) |
+
+### Exemplo de saída
+
+```
+4 equipe(s) com coach de email @aluno.ifsp.edu.br:
+
+  Campus : Birigui
+  Equipe : 404 team not found
+  Coach  : Fulano de Tal <fulano@aluno.ifsp.edu.br>
+```
+
+---
+
+## 7. `inscricoes_atuais.py` — Enviar emails de confirmação
 
 Lê o `equipes_interif.csv` e envia três grupos de emails via Gmail:
 
@@ -276,7 +433,47 @@ Use `--dry-run` antes de executar o envio real para conferir destinatário, assu
 
 ---
 
-## 5. `total_camisetas.py` — Contagem de camisetas
+## 8. `enviar_mensagem.py` — Mala direta com template Jinja2
+
+Envia emails personalizados para coordenadores de campus, coaches ou participantes usando um arquivo de template [Jinja2](https://jinja.palletsprojects.com/). Útil para comunicações avulsas que não se encaixam nos fluxos fixos dos outros scripts.
+
+A documentação completa com a lista de variáveis disponíveis no template e exemplos de uso está em **`ENVIAR_MENSAGEM.md`**.
+
+### Uso básico
+
+```bash
+uv run python enviar_mensagem.py TEMPLATE.j2 --assunto "ASSUNTO" [AUDIÊNCIA] [--dry-run]
+```
+
+É obrigatório informar o template, o assunto e pelo menos uma audiência.
+
+### Opções
+
+| Opção | Descrição |
+|-------|-----------|
+| `TEMPLATE` | Caminho do arquivo de template Jinja2 (ex: `meu_template.j2`) |
+| `--assunto TEXTO` | Assunto do email — também aceita variáveis Jinja2 |
+| `--coordenadores` | Envia um email por coordenador de campus |
+| `--coaches` | Envia um email por coach (responsável pela equipe) |
+| `--participantes` | Envia um email por participante individual |
+| `--por-equipe` | Com `--participantes`: um email por equipe (todos os membros copiados) |
+| `--csv ARQUIVO` | CSV de equipes a usar (padrão: `equipes_interif.csv`) |
+| `--cc EMAIL` | CC opcional para todos os envios |
+| `--dry-run` | Imprime os emails sem enviar — use sempre antes do envio real |
+
+### Exemplo
+
+```bash
+# Testar template para coordenadores
+uv run python enviar_mensagem.py aviso.j2 --assunto "Aviso — {{ evento }}" --coordenadores --dry-run
+
+# Disparar envio real
+uv run python enviar_mensagem.py aviso.j2 --assunto "Aviso — {{ evento }}" --coordenadores
+```
+
+---
+
+## 9. `total_camisetas.py` — Contagem de camisetas
 
 Lê o `equipes_interif.csv` e exibe o total de camisetas por tamanho em cada campus. Participantes que responderam "Não quero camiseta" são contados separadamente e excluídos dos totais por tamanho.
 
@@ -305,9 +502,9 @@ uv run python total_camisetas.py -o camisetas.md
 
 ---
 
-## 6. `lista_equipes_especiais.py` — Listar equipes por categoria especial
+## 10. `graficos_equipes.py` — Gerar gráficos e listar equipes especiais
 
-Lê o `equipes_interif.csv` e classifica as equipes em cinco categorias:
+Lê o `equipes_interif.csv`, gera os gráficos de distribuição das equipes e classifica as equipes em cinco categorias:
 
 1. **Apenas alunos do ensino médio integrado** — composta somente por alunos do EM
 2. **Exatamente três mulheres** — equipe com composição totalmente feminina
@@ -320,7 +517,7 @@ As categorias não são mutuamente exclusivas: uma equipe de ensino médio integ
 ### Uso
 
 ```bash
-uv run python lista_equipes_especiais.py [opções]
+uv run python graficos_equipes.py [opções]
 ```
 
 ### Opções
@@ -329,20 +526,51 @@ uv run python lista_equipes_especiais.py [opções]
 |-------|--------|-----------|
 | `--input ARQUIVO` | `-i` | CSV de entrada (padrão: `equipes_interif.csv`) |
 | `--output ARQUIVO.md` | `-o` | Salva o resultado em Markdown |
+| `--resumo` | - | Gera e envia o quadro resumo por e-mail |
+| `--dry-run` | - | Com `--resumo`, imprime o e-mail sem enviar |
 
 ### Exemplos
 
 ```bash
 # Exibir no terminal
-uv run python lista_equipes_especiais.py
+uv run python graficos_equipes.py
 
 # Exportar como Markdown
-uv run python lista_equipes_especiais.py -o especiais.md
+uv run python graficos_equipes.py -o especiais.md
 ```
 
 ---
 
-## 7. `gerar_arquivos_boca.py` — Gerar arquivos do BOCA
+## 11. `equipes_html.py` — Gerar tabela HTML para divulgação
+
+Converte o `equipes_interif.csv` em uma tabela HTML pronta para publicação. Os CPFs dos participantes são mascarados para proteção de dados pessoais. As equipes são ordenadas por campus e nome da equipe.
+
+### Uso
+
+```bash
+uv run python equipes_html.py [opções]
+```
+
+### Opções
+
+| Opção | Atalho | Descrição |
+|-------|--------|-----------|
+| `--input ARQUIVO` | `-i` | CSV de entrada (padrão: `equipes_interif.csv`) |
+| `--output ARQUIVO` | `-o` | Arquivo HTML gerado (padrão: `equipes.html`) |
+
+### Exemplos
+
+```bash
+# Gerar com nomes padrão
+uv run python equipes_html.py
+
+# Salvar em arquivo diferente
+uv run python equipes_html.py -o public/equipes.html
+```
+
+---
+
+## 12. `gerar_arquivos_boca.py` — Gerar arquivos do BOCA
 
 Lê `equipes_interif.csv` e `assets/ifsp_campi.csv` e gera os quatro arquivos de configuração necessários para o [BOCA Online Contest Administrator](https://www.ime.usp.br/~cassio/boca/):
 
@@ -390,7 +618,53 @@ uv run python gerar_arquivos_boca.py --dry-run
 
 ---
 
-## 8. `enviar_credenciais.py` — Enviar credenciais de acesso
+## 13. `gerar_arquivos_noca.py` — Gerar arquivo de importação para o NOCA
+
+Alternativa ao BOCA. Lê `equipes_interif.csv` e `assets/ifsp_campi.csv` e gera um arquivo de importação em lote para o NOCA (contest manager). Cada campus vira um site no NOCA; o campo `site` de cada linha aciona a criação automática do site durante o import.
+
+Funções geradas:
+
+| Função | Descrição |
+|--------|-----------|
+| `team` | Um por equipe inscrita (email: participante 1) |
+| `staff` | Um por campus, username `staff{sigla}` |
+| `judge` | Um por técnico/responsável, deduplicado por CPF |
+| `user` | `scoreif` (placar) |
+
+### Uso
+
+```bash
+uv run python gerar_arquivos_noca.py [CSV] [opções]
+```
+
+### Opções
+
+| Opção | Atalho | Descrição |
+|-------|--------|-----------|
+| `CSV` | | CSV de equipes (padrão: `equipes_interif.csv`) |
+| `--output DIR` | `-o` | Diretório de saída (padrão: diretório atual) |
+| `--output-file ARQUIVO` | | Nome do arquivo gerado (padrão: `usuarios_noca.csv` ou `usuarios_noca.json`) |
+| `--formato {csv,json}` | | Formato de saída (padrão: `csv`) |
+| `--campi ARQUIVO` | | CSV de siglas de campus (padrão: `assets/ifsp_campi.csv`) |
+| `--sigla` | | Usa sigla do campus no campo `site` |
+| `--dry-run` | | Exibe o conteúdo sem gravar |
+
+### Exemplos
+
+```bash
+# Gerar CSV de importação
+uv run python gerar_arquivos_noca.py
+
+# Gerar em formato JSON
+uv run python gerar_arquivos_noca.py --formato json
+
+# Pré-visualizar sem gravar
+uv run python gerar_arquivos_noca.py --dry-run
+```
+
+---
+
+## 14. `enviar_credenciais.py` — Enviar credenciais de acesso
 
 Envia os dados de login do BOCA por email, usando `output/usuarios.txt` como **fonte da verdade** para username e senha. Os endereços de email são lidos do `equipes_interif.csv` e vinculados às equipes pelo nome. Isso garante que as senhas enviadas por email são idênticas às gravadas nos arquivos BOCA — mesmo que o CSV tenha sido alterado após a geração dos arquivos.
 
@@ -428,7 +702,7 @@ uv run python enviar_credenciais.py
 
 ---
 
-## 9. `gerar_etiquetas.py` — Gerar etiquetas de credenciais
+## 15. `gerar_etiquetas.py` — Gerar etiquetas de credenciais
 
 Lê `output/usuarios.txt` (fonte da verdade gerada por `gerar_arquivos_boca.py`) e os endereços de email do `equipes_interif.csv`, e gera um PDF de etiquetas de credenciais por campus — layout 2 colunas × 6 etiquetas por página A4. Cada etiqueta exibe o campus, o nome da equipe, o username e a senha do BOCA.
 
@@ -467,7 +741,7 @@ uv run python gerar_etiquetas.py -o output/etiquetas
 
 ---
 
-## 10. `gerar_placas.py` — Gerar placas de identificação
+## 16. `gerar_placas.py` — Gerar placas de identificação
 
 Lê `output/usuarios.txt` (fonte da verdade gerada por `gerar_arquivos_boca.py`) e os dados das equipes do `equipes_interif.csv`, e gera um PDF de placas de identificação por campus — uma página landscape A4 por equipe, com fundo gradiente colorido. Cada placa exibe o título do evento, os logos, o nome da equipe e o username do BOCA.
 
@@ -506,74 +780,6 @@ uv run python gerar_placas.py -o output/placas
 
 ---
 
-## 11. `lista_cursos.py` — Padronizar nomes de cursos
-
-Normaliza a coluna `Nome do curso` do `equipes_interif.csv`, cujo preenchimento livre pelos participantes gera muitas variantes do mesmo curso (diferenças de caixa, abreviações, erros de digitação).
-
-O processo é iterativo: rode `--gerar-mapa`, edite o arquivo gerado até ficar satisfeito com os agrupamentos, rode `--aplicar`. Repita se necessário.
-
-### Passada 1 — gerar o mapeamento automático
-
-```bash
-uv run python lista_cursos.py --gerar-mapa
-```
-
-Usa `rapidfuzz` (similaridade mínima de 80) para agrupar nomes parecidos e escolhe automaticamente o nome canônico de cada grupo (o mais frequente; em empate, o mais longo). Gera `cursos_mapa.csv` com duas colunas: `original` e `canonico`, ordenado pelo nome canônico para facilitar a revisão.
-
-**Edite `cursos_mapa.csv`** corrigindo a coluna `canonico` onde o agrupamento automático errou — é comum confundir cursos distintos com nomes similares (ex.: "Técnico em Informática" e "Técnico em Informática para Internet").
-
-### Passada 2 — aplicar as correções
-
-```bash
-# Conferir antes de gravar
-uv run python lista_cursos.py --aplicar --dry-run
-
-# Gravar as substituições no equipes_interif.csv
-uv run python lista_cursos.py --aplicar
-```
-
-### Opções
-
-| Opção | Descrição |
-|-------|-----------|
-| `--gerar-mapa` | Gera `cursos_mapa.csv` com agrupamento automático |
-| `--aplicar` | Aplica `cursos_mapa.csv` ao CSV de equipes |
-| `--dry-run` | (com `--aplicar`) Lista as substituições sem gravar |
-| `--csv ARQUIVO` | CSV de equipes (padrão: `equipes_interif.csv`) |
-| `--mapa ARQUIVO` | Arquivo de mapeamento (padrão: `cursos_mapa.csv`) |
-
-> `cursos_mapa.csv` é um arquivo derivado e está no `.gitignore`.
-
----
-
-## 12. `coach_aluno_email.py` — Detectar coaches com email de aluno
-
-Lê o `equipes_interif.csv` e lista todas as equipes cujo coach (responsável) possui endereço de email com domínio `@aluno.ifsp.edu.br`, indicando um possível cadastro incorreto. A saída é ordenada por campus e nome da equipe.
-
-### Uso
-
-```bash
-uv run python coach_aluno_email.py
-```
-
-### Opções
-
-| Opção | Descrição |
-|-------|-----------|
-| `--csv ARQUIVO` | CSV de equipes (padrão: `equipes_interif.csv`) |
-
-### Exemplo de saída
-
-```
-4 equipe(s) com coach de email @aluno.ifsp.edu.br:
-
-  Campus : Birigui
-  Equipe : 404 team not found
-  Coach  : Fulano de Tal <fulano@aluno.ifsp.edu.br>
-```
-
----
-
 ## `config.py` — Configuração da edição
 
 **Edite este arquivo a cada edição do InterIF.** Centraliza todas as constantes que variam de um ano para o outro, evitando que fiquem espalhadas pelos scripts.
@@ -601,6 +807,7 @@ uv run python coach_aluno_email.py
 | `PLACA_FONTE_NOME_BOLD` | `gerar_placas` | Arquivo de fonte bold para o nome da equipe (em `assets/`) |
 | `PLACA_SUBJECT` | `gerar_placas` | Assunto do email com as placas em anexo |
 | `PLACA_BODY_TEMPLATE` | `gerar_placas` | Corpo do email (placeholders: `{nome}`, `{campus}`) |
+| `SPECIAL_SUMMARY_SUBJECT` | `graficos_equipes` | Assunto do email de resumo de equipes especiais |
 
 Os textos de `*_PRE` aceitam placeholders preenchidos em runtime: `{nome}` (primeiro nome do destinatário) e `{campus}` (apenas em `COORD_PRE`). Os textos de `NOTIFY_BODY` aceitam `{nome}`, `{cpf}` e `{interif_email}`. O texto de `DUPLICATA_BODY` aceita `{nome}`, `{criterio}` e `{equipes_detalhe}`. Os templates `ETIQ_BODY_TEMPLATE` e `PLACA_BODY_TEMPLATE` aceitam `{nome}` e `{campus}`.
 

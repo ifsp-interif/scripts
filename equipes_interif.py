@@ -15,18 +15,12 @@ import subprocess
 import sys
 from pathlib import Path
 
-import matplotlib
-import matplotlib.pyplot as plt
-
 from config import EMAIL_INTERIF, SUMMARY_POST, SUMMARY_PRE, SUMMARY_SUBJECT, TITULO_EVENTO
 from email_utils import send_email
-
-matplotlib.use("Agg")
 
 SHEET_NAME = "Respostas ao formulário 1"
 OUTPUT_FILE = Path(__file__).parent / "equipes_interif.csv"
 COORD_OUTPUT_FILE = Path(__file__).parent / "coordenadores_interif.csv"
-CHART_OUTPUT_FILE = Path(__file__).parent / "distribuicao_equipes.png"
 
 # ── Column layout of the *teams* sheet (0-based, header row excluded) ─────────
 # Adjust these constants if the spreadsheet columns are ever reordered.
@@ -113,15 +107,9 @@ def parse_args() -> argparse.Namespace:
         help=f"Caminho do CSV de coordenadores (padrão: {COORD_OUTPUT_FILE.name})",
     )
     parser.add_argument(
-        "--chart",
-        metavar="ARQUIVO",
-        default=str(CHART_OUTPUT_FILE),
-        help=f"Caminho do gráfico de distribuição (padrão: {CHART_OUTPUT_FILE.name})",
-    )
-    parser.add_argument(
         "--email",
         action="store_true",
-        help=f"Envia email de resumo com o gráfico para {EMAIL_INTERIF}",
+        help=f"Envia email de resumo para {EMAIL_INTERIF}",
     )
     parser.add_argument(
         "--dry-run",
@@ -131,53 +119,13 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-# ── Chart ─────────────────────────────────────────────────────────────────────
-
-
-def generate_pie_chart(campus_counts: dict[str, int], chart_path: Path) -> None:
-    """Gera gráfico de pizza com a distribuição de equipes por campus."""
-    labels = list(campus_counts.keys())
-    sizes = list(campus_counts.values())
-    total = sum(sizes)
-
-    fig, ax = plt.subplots(figsize=(10, 8))
-
-    wedges, texts, autotexts = ax.pie(
-        sizes,
-        labels=None,
-        autopct="%1.1f%%",
-        startangle=140,
-        pctdistance=1.18,
-    )
-
-    for autotext in autotexts:
-        autotext.set_fontsize(8)
-
-    ax.legend(
-        wedges,
-        [f"{label} ({count})" for label, count in zip(labels, sizes, strict=True)],
-        title="Campus",
-        loc="upper center",
-        bbox_to_anchor=(0.5, -0.05),
-        ncols=3,
-        fontsize=9,
-    )
-
-    ax.set_title(f"Distribuição de Equipes por Campus\n{TITULO_EVENTO} — {total} equipes no total", pad=20)
-
-    plt.tight_layout()
-    fig.savefig(chart_path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    print(f"Gráfico salvo em {chart_path}")
-
-
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 
 def main() -> None:
     args = parse_args()
 
-    print("Lendo planilha 1 (coordenadores de campus)...")
+    print("Lendo planilha 1 (coordenadores de campi)...")
     _, rows1 = read_sheet(args.campi, SHEET_NAME)
     print(f"  {len(rows1)} linhas lidas")
 
@@ -251,18 +199,14 @@ def main() -> None:
         for r in unmatched:
             print(f"  - {r[TEAM_NAME_COL]} ({r[CAMPUS_COL]})")
 
-    # Pie chart: count teams per campus (uses the Campus column in result_rows)
-    campus_counts: dict[str, int] = {}
-    for r in result_rows:
-        campus = r[CAMPUS_COL] or "Não informado"
-        campus_counts[campus] = campus_counts.get(campus, 0) + 1
-    campus_counts = dict(sorted(campus_counts.items(), key=lambda x: x[1], reverse=True))
-
-    chart_path = Path(args.chart)
-    generate_pie_chart(campus_counts, chart_path)
-
     if args.email:
         print(f"\n=== Email de resumo para a organização ({EMAIL_INTERIF}) ===")
+        campus_counts: dict[str, int] = {}
+        for r in result_rows:
+            campus = r[CAMPUS_COL] or "Não informado"
+            campus_counts[campus] = campus_counts.get(campus, 0) + 1
+        campus_counts = dict(sorted(campus_counts.items(), key=lambda x: x[1], reverse=True))
+
         lines = "\n".join(
             f"  {campus}: {count} equipe(s)" for campus, count in campus_counts.items()
         )
@@ -272,7 +216,6 @@ def main() -> None:
             EMAIL_INTERIF,
             SUMMARY_SUBJECT,
             body,
-            attach=chart_path,
             dry_run=args.dry_run,
         )
 

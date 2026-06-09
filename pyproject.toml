@@ -17,7 +17,7 @@ dependencies = [
     # gerar_etiquetas.py
     "reportlab>=4.0",
     "pillow>=10.0",
-    # lista_equipes_especiais.py
+    # graficos_equipes.py
     "tabulate>=0.9",
     # normalização de nomes de cursos
     "rapidfuzz>=3.0",
@@ -38,8 +38,10 @@ interif-credenciais  = "enviar_credenciais:main"      # python enviar_credenciai
 interif-camisetas    = "total_camisetas:main"          # python total_camisetas.py
 interif-etiquetas    = "gerar_etiquetas:main"             # python gerar_etiquetas.py
 interif-placas       = "gerar_placas:main"                # python gerar_placas.py
-interif-equipes-especiais = "lista_equipes_especiais:main" # python lista_equipes_especiais.py
+interif-graficos      = "graficos_equipes:main"        # python graficos_equipes.py
+interif-equipes-especiais = "graficos_equipes:main"    # compatibilidade
 interif-mensagem          = "enviar_mensagem:main"          # python enviar_mensagem.py
+interif-matriculas        = "verifica_matriculas:main"      # python verifica_matriculas.py
 
 # ── Hatchling: inclui os scripts avulsos (sem __init__.py) ───────────────────
 [tool.hatch.build.targets.wheel]
@@ -54,7 +56,8 @@ packages = [
     "total_camisetas.py",
     "gerar_etiquetas.py",
     "gerar_placas.py",
-    "lista_equipes_especiais.py",
+    "graficos_equipes.py",
+    "verifica_matriculas.py",
 ]
 
 # ── Ruff (linter / formatter) ────────────────────────────────────────────────

@@ -197,7 +197,17 @@ def build_entries(headers: list[str], rows: list[dict]) -> tuple[list[CpfEntry],
 # ── Envio de notificações ─────────────────────────────────────────────────────
 
 
-def notify_invalid(entries: list[CpfEntry], dry_run: bool) -> None:
+def _confirmar_envio(entry: CpfEntry, cc_str: str) -> bool:
+    """Exibe um resumo do email e retorna True se o usuário confirmar o envio."""
+    print(f"\n  Para:    {entry.email}")
+    print(f"  CC:      {cc_str}")
+    print(f"  Assunto: {NOTIFY_SUBJECT}")
+    print(f"  Pessoa:  {entry.nome} ({entry.papel}) — CPF {entry.cpf_fmt}")
+    resposta = input("  Enviar? [s/N] ").strip().lower()
+    return resposta == "s"
+
+
+def notify_invalid(entries: list[CpfEntry], dry_run: bool, confirm: bool = False) -> None:
     """Envia email para cada pessoa com CPF inválido que tenha endereço disponível."""
     invalids = [e for e in entries if not e.valido]
 
@@ -221,6 +231,10 @@ def notify_invalid(entries: list[CpfEntry], dry_run: bool) -> None:
             print(f"  -> Para: {dest}")
             print(f"     Assunto: {NOTIFY_SUBJECT}")
             print(body)
+            continue
+
+        if confirm and not _confirmar_envio(entry, cc_str):
+            print("    Ignorado.")
             continue
 
         print(f"  -> Enviando para {dest} ...")
@@ -328,6 +342,11 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--confirmar",
+        action="store_true",
+        help="Solicita confirmação interativa antes de enviar cada email",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Mostra um preview dos emails no terminal sem chamar o gws",
@@ -384,7 +403,7 @@ def main() -> None:
         export_csv(display_entries, Path(args.output))
 
     if args.notificar:
-        notify_invalid(entries, dry_run=args.dry_run)
+        notify_invalid(entries, dry_run=args.dry_run, confirm=args.confirmar)
 
 
 if __name__ == "__main__":
