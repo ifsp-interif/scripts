@@ -33,6 +33,9 @@ COURSE_NAME_PIE_CHART_FILE = Path(__file__).parent / "distribuicao_curso.png"
 COURSE_NAME_BY_CAMPUS_DIR = "cursos_por_campus"
 HIGH_SCHOOL_CHART_FILE = Path(__file__).parent / "distribuicao_ensino_medio.png"
 GENDER_CHART_FILE = Path(__file__).parent / "distribuicao_genero.png"
+TEAM_SIZE_CHART_FILE = Path(__file__).parent / "distribuicao_tamanho_equipes.png"
+WOMEN_PIE_CHART_FILE = Path(__file__).parent / "participacao_mulheres.png"
+HIGH_SCHOOL_PIE_CHART_FILE = Path(__file__).parent / "participacao_ensino_medio.png"
 INPUT_FILE = Path(__file__).parent / "equipes_interif.csv"
 DEFAULT_CHART_DIR = Path(__file__).parent
 
@@ -60,6 +63,7 @@ class Team:
     nome: str
     mulheres: int | None
     apenas_ensino_medio: bool
+    participantes: int
 
 
 @dataclass
@@ -181,12 +185,20 @@ def load_teams(csv_path: Path) -> list[Team]:
             campus = row.get(CAMPUS_HEADER, "").strip()
             if not nome or not campus:
                 continue
+            participantes = sum(
+                1
+                for header, value in row.items()
+                if header
+                and header.startswith(PARTICIPANT_NAME_PREFIX)
+                and (value or "").strip()
+            )
             teams.append(
                 Team(
                     campus=campus,
                     nome=nome,
                     mulheres=parse_women_count(row.get(WOMEN_HEADER, "")),
                     apenas_ensino_medio=parse_yes(row.get(HIGH_SCHOOL_HEADER, "")),
+                    participantes=participantes,
                 )
             )
 
@@ -923,6 +935,145 @@ def generate_gender_chart(teams: list[Team], chart_path: Path) -> None:
     print(f"Gráfico de gênero salvo em {chart_path}")
 
 
+def _two_slice_pie(
+    sizes: list[int],
+    labels: list[str],
+    colors: list[str],
+    title: str,
+    legend_title: str,
+    chart_path: Path,
+) -> None:
+    fig, ax = plt.subplots(figsize=(10, 8))
+
+    wedges, _, autotexts = ax.pie(
+        sizes,
+        labels=None,
+        autopct="%1.1f%%",
+        startangle=140,
+        pctdistance=0.7,
+        colors=colors,
+    )
+    for autotext in autotexts:
+        autotext.set_fontsize(10)
+        autotext.set_color("white")
+        autotext.set_fontweight("bold")
+
+    ax.legend(
+        wedges,
+        [f"{label} ({size})" for label, size in zip(labels, sizes, strict=True)],
+        title=legend_title,
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.05),
+        ncols=2,
+        fontsize=10,
+    )
+    ax.set_title(title, pad=20)
+
+    plt.tight_layout()
+    fig.savefig(chart_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+
+def generate_team_size_chart(teams: list[Team], chart_path: Path) -> None:
+    if not teams:
+        print("Aviso: nenhuma equipe encontrada para o gráfico de tamanho das equipes.")
+        return
+
+    counts = Counter(team.participantes for team in teams)
+    sizes = [3, 2, 1]
+    values = [counts.get(size, 0) for size in sizes]
+    labels = [f"{size} participantes" if size != 1 else "1 participante" for size in sizes]
+    colors = ["#1565c0", "#42a5f5", "#bbdefb"]
+    total = len(teams)
+
+    fig, ax = plt.subplots(figsize=(11, 3.2))
+    lefts = [sum(values[:idx]) for idx in range(len(values))]
+
+    for value, left, label, color in zip(values, lefts, labels, colors, strict=True):
+        if value <= 0:
+            continue
+        ax.barh(0, value, left=left, color=color, label=label)
+        ax.text(
+            left + value / 2,
+            0,
+            str(value),
+            ha="center",
+            va="center",
+            fontsize=10,
+            color="black",
+        )
+
+    ax.set_yticks([])
+    ax.set_xlabel("Número de equipes")
+    ax.set_xlim(0, total)
+    ax.set_title(
+        "Distribuição de equipes por número de participantes\n"
+        f"{TITULO_EVENTO} — {total} equipes no total",
+        pad=12,
+    )
+    ax.legend(
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.55),
+        ncols=len(sizes),
+        fontsize=9,
+    )
+
+    plt.tight_layout()
+    fig.savefig(chart_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Gráfico de tamanho das equipes salvo em {chart_path}")
+
+
+def generate_women_pie_chart(teams: list[Team], chart_path: Path) -> None:
+    if not teams:
+        print("Aviso: nenhuma equipe encontrada para o gráfico de participação de mulheres.")
+        return
+
+    total_participantes = sum(team.participantes for team in teams)
+    mulheres = sum(team.mulheres or 0 for team in teams)
+
+    if total_participantes <= 0:
+        print("Aviso: nenhum participante encontrado para o gráfico de participação de mulheres.")
+        return
+
+    demais = max(total_participantes - mulheres, 0)
+    _two_slice_pie(
+        sizes=[mulheres, demais],
+        labels=["Mulheres", "Demais inscritos"],
+        colors=["#d81b60", "#bdbdbd"],
+        title=(
+            "Participação de mulheres entre os inscritos\n"
+            f"{TITULO_EVENTO} — {total_participantes} inscritos no total"
+        ),
+        legend_title="Participantes",
+        chart_path=chart_path,
+    )
+    print(f"Gráfico de participação de mulheres salvo em {chart_path}")
+
+
+def generate_high_school_pie_chart(teams: list[Team], chart_path: Path) -> None:
+    if not teams:
+        print("Aviso: nenhuma equipe encontrada para o gráfico de participação do ensino médio.")
+        return
+
+    total = len(teams)
+    apenas_em = sum(1 for team in teams if team.apenas_ensino_medio)
+    demais = total - apenas_em
+
+    _two_slice_pie(
+        sizes=[apenas_em, demais],
+        labels=["Apenas ensino médio", "Demais equipes"],
+        colors=["#43a047", "#bdbdbd"],
+        title=(
+            "Equipes compostas apenas por alunos do ensino médio\n"
+            f"{TITULO_EVENTO} — {total} equipes no total"
+        ),
+        legend_title="Equipes",
+        chart_path=chart_path,
+    )
+    print(f"Gráfico de participação do ensino médio salvo em {chart_path}")
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 
@@ -995,6 +1146,9 @@ def main() -> None:
     )
     generate_high_school_chart(teams, charts_dir / HIGH_SCHOOL_CHART_FILE.name)
     generate_gender_chart(teams, charts_dir / GENDER_CHART_FILE.name)
+    generate_team_size_chart(teams, charts_dir / TEAM_SIZE_CHART_FILE.name)
+    generate_women_pie_chart(teams, charts_dir / WOMEN_PIE_CHART_FILE.name)
+    generate_high_school_pie_chart(teams, charts_dir / HIGH_SCHOOL_PIE_CHART_FILE.name)
 
     if args.output:
         output_path = Path(args.output)
