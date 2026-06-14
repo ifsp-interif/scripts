@@ -109,6 +109,16 @@ ETIQ_BODY_TEMPLATE = (
     + f"Atenciosamente,\nOrganização {TITULO_EVENTO}"
 )
 
+ETIQ_COACH_SUBJECT = f"Etiquetas de credenciais da(s) sua(s) equipe(s) — {TITULO_EVENTO}"
+ETIQ_COACH_BODY_TEMPLATE = (
+    BANNER
+    + "Olá, {nome}!\n\n"
+    + "Segue em anexo as etiquetas de credenciais da(s) equipe(s) sob sua responsabilidade "
+    + "no campus {campus} "
+    + f"para o {TITULO_EVENTO}.\n\n"
+    + f"Atenciosamente,\nOrganização {TITULO_EVENTO}"
+)
+
 # ── Placas de identificação (gerar_placas.py) ────────────────────────────────
 # Placeholders em PLACA_BODY_TEMPLATE: {nome}, {campus}  (preenchidos em runtime)
 

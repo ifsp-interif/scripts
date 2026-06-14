@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 """
-Gera etiquetas de credenciais BOCA (uma por equipe) em PDFs agrupados por campus.
+Gera etiquetas de credenciais BOCA (uma por equipe) em PDFs agrupados por campus
+e também por coach (responsável pela equipe).
 
 Lê username/senha de usuarios.txt (fonte da verdade gerada por gerar_arquivos_boca.py)
-e endereços de coordenadores do CSV de equipes.  Salva um PDF por campus no diretório
-de saída.  Com --send envia cada PDF ao coordenador via `gws gmail +send --attach`.
+e endereços de coordenadores/coaches do CSV de equipes.  Salva:
+  - Um PDF por campus em <saída>/
+  - Um PDF por coach em <saída>/coaches/
+
+Com --send envia cada PDF ao coordenador (PDF do campus) e a cada coach (PDF do coach).
 
 Uso:
     uv run python gerar_etiquetas.py [--usuarios output/usuarios.txt]
@@ -32,6 +36,8 @@ from tabulate import tabulate
 
 from config import (
     ETIQ_BODY_TEMPLATE,
+    ETIQ_COACH_BODY_TEMPLATE,
+    ETIQ_COACH_SUBJECT,
     ETIQ_FONTE_MONO,
     ETIQ_SUBJECT,
     TITULO_EVENTO,
@@ -303,6 +309,7 @@ def main() -> None:
     n_pdfs = 0
     n_emails = 0
 
+    # ── PDFs por campus (enviados ao coordenador) ─────────────────────────────
     for campus, grupo in por_campus.items():
         nome_arquivo = _limpar_nome(f"IFSP_-_{campus}") + ".pdf"
         caminho_pdf = output_dir / nome_arquivo
@@ -310,9 +317,8 @@ def main() -> None:
         gerar_pdf_campus(grupo, caminho_pdf)
         n_pdfs += 1
 
-        print(f"OK: {campus} -> {caminho_pdf} ({len(grupo)} etiqueta(s))")
+        print(f"OK campus: {campus} -> {caminho_pdf} ({len(grupo)} etiqueta(s))")
 
-        # Envio opcional
         if args.send or args.dry_run:
             coord_email = grupo[0].coord_email if grupo else ""
             coord_nome = grupo[0].primeiro_nome_coord if grupo else "Coordenador(a)"
@@ -330,17 +336,66 @@ def main() -> None:
                 )
                 n_emails += 1
 
+    # ── PDFs por coach (enviados ao responsável pela equipe) ──────────────────
+    por_coach: dict[str, list[CredencialEquipe]] = defaultdict(list)
+    for cred in credenciais:
+        if cred.resp_email:
+            por_coach[cred.resp_email].append(cred)
+
+    coaches_dir = output_dir / "coaches"
+    coaches_dir.mkdir(parents=True, exist_ok=True)
+
+    n_pdfs_coach = 0
+    n_emails_coach = 0
+
+    for resp_email, grupo_coach in por_coach.items():
+        primeiro = grupo_coach[0]
+        nome_coach = primeiro.resp_nome or resp_email
+        primeiro_nome = primeiro.primeiro_nome_resp
+
+        campi_coach = sorted({c.campus for c in grupo_coach if c.campus})
+        campus_str = ", ".join(campi_coach) if campi_coach else "campus desconhecido"
+
+        nome_arquivo_coach = _limpar_nome(nome_coach) + ".pdf"
+        caminho_pdf_coach = coaches_dir / nome_arquivo_coach
+
+        gerar_pdf_campus(grupo_coach, caminho_pdf_coach)
+        n_pdfs_coach += 1
+
+        print(f"OK coach:  {nome_coach} -> {caminho_pdf_coach} ({len(grupo_coach)} etiqueta(s))")
+
+        if args.send or args.dry_run:
+            body = ETIQ_COACH_BODY_TEMPLATE.format(nome=primeiro_nome, campus=campus_str)
+            send_email(
+                resp_email,
+                f"{ETIQ_COACH_SUBJECT} — {campus_str}",
+                body,
+                attach=caminho_pdf_coach,
+                dry_run=args.dry_run,
+            )
+            n_emails_coach += 1
+
+    sem_coach = sum(1 for c in credenciais if not c.resp_email)
+    if sem_coach:
+        print(f"\nAviso: {sem_coach} equipe(s) sem email de responsável — sem PDF de coach.")
+
     # Resumo final
     print()
     rows: list[list[str | int]] = [
         ["Equipes", len(credenciais)],
-        ["Campus", len(por_campus)],
-        ["PDFs", n_pdfs],
+        ["Campi", len(por_campus)],
+        ["PDFs campus", n_pdfs],
+        ["PDFs coach", n_pdfs_coach],
     ]
     if args.dry_run:
-        rows.append(["Emails", f"dry-run ({n_emails} simulado(s))"])
+        total_sim = n_emails + n_emails_coach
+        rows.append(["Emails coord.", f"dry-run ({n_emails} simulado(s))"])
+        rows.append(["Emails coach", f"dry-run ({n_emails_coach} simulado(s))"])
+        rows.append(["Emails total", f"dry-run ({total_sim} simulado(s))"])
     elif args.send:
-        rows.append(["Emails", f"{n_emails} enviado(s)"])
+        rows.append(["Emails coord.", f"{n_emails} enviado(s)"])
+        rows.append(["Emails coach", f"{n_emails_coach} enviado(s)"])
+        rows.append(["Emails total", f"{n_emails + n_emails_coach} enviado(s)"])
 
     print("Resumo")
     print(tabulate(rows, tablefmt="simple"))
