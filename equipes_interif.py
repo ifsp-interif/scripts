@@ -145,8 +145,8 @@ def main() -> None:
         [campus, nome, email]
         for _, (campus, nome, email) in sorted(coord_map.items(), key=lambda item: item[0])
     ]
-    with open(coord_output_path, "w", newline="", encoding="utf-8-sig") as f:
-        writer = csv.writer(f)
+    with open(coord_output_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f, lineterminator="\n")
         writer.writerow(
             [
                 "Campus",
@@ -183,8 +183,8 @@ def main() -> None:
     result_rows.sort(key=lambda r: (r[CAMPUS_COL].lower(), r[TEAM_NAME_COL].lower()))
 
     output_path = Path(args.output)
-    with open(output_path, "w", newline="", encoding="utf-8-sig") as f:
-        writer = csv.writer(f)
+    with open(output_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f, lineterminator="\n")
         writer.writerow(output_headers)
         writer.writerows(result_rows)
 
