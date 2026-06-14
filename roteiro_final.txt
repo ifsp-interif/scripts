@@ -2,13 +2,19 @@
 
 uv run equipes_interif.py \
        --campi 1Rgahq9BEP1aYralpEvSpidfgT0rEopJ_gaIKUpv2g0c \
-	   --teams 1OcMWMcFN3GV742Lh1PH6_9WCdN1ZKk8UvjhR9fkXmFk
+       --teams 1OcMWMcFN3GV742Lh1PH6_9WCdN1ZKk8UvjhR9fkXmFk
+
+--- Exportar alunos do SUAP
+
+Exportar do SUAP dois arquivos CSV com todos os alunos matriculados em cursos de nível médio
+de de graduação. Salvar cada um em um arquivo CSV separado. Os arquivos serão usados para confirmar
+que os alunos estão matriculados, e para normalizar os nomes de cursos informados na inscrição.
 
 --- Verificar alunos em situação irregular
 
 uv run verifica_matriculas.py \
        --graduacao incoming/alunos_graduacao_suap.csv \
-	   --medio incoming/alunos_medio_suap.csv --irregulares
+       --medio incoming/alunos_medio_suap.csv --irregulares
 
 --- Validar CPFs
 
@@ -28,22 +34,22 @@ uv run duplicatas_participantes.py
 
 uv run graficos_equipes.py \
        --charts-dir graficos \
-	   --course-charts-by-campus \
-	   --output graficos/equipes_especiais.md
+       --course-charts-by-campus \
+       --output graficos/equipes_especiais.md
 
 --- Enviar mails
 
 uv run enviar_mensagem.py templates/equipes_inscritas_campus.j2 \
        --coordenadores \
-	   --assunto "Lista FINAL de equipes inscritas para o {{ evento }}" --dry-run | bat
+       --assunto "Lista FINAL de equipes inscritas para o {{ evento }}" --dry-run | bat
 
 uv run enviar_mensagem.py templates/equipes_por_coach.j2 \
        --coaches \
-	   --assunto "Lista FINAL de equipes inscritas para o {{ evento }}" --dry-run | bat
+       --assunto "Lista FINAL de equipes inscritas para o {{ evento }}" --dry-run | bat
 
 uv run enviar_mensagem.py templates/confirmacao_inscricao_equipe.j2 \
        --participantes --por-equipe \
-	   --assunto "Confirmação de inscrição da equipe {{ equipe }} para o {{ evento }}" --dry-run | bat
+       --assunto "Confirmação de inscrição da equipe {{ equipe }} para o {{ evento }}" --dry-run | bat
 
 --- Verificar emails que retornaram
 
