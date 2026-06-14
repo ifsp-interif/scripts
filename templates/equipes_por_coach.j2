@@ -1,0 +1,24 @@
+************************************************************************************
+                         Esta é uma mensagem automática
+************************************************************************************
+
+Prezado {{ nome }},
+
+Após a validação das equipes inscritas, esta é a lista final com a(s) {{ total_equipes }} equipe(s) sob sua responsabilidade durante a primeira fase do IX InterIF no campus {{ campus }}.
+{% for e in equipes %}
+▸ {{ e.nome }}
+  Participantes ({{ e.total_participantes }}):
+  {% for p in e.participantes %}  • {{ p.nome }} <{{ p.email }}>
+  {% endfor %}
+{%- endfor %}
+Lembramos que a prova acontecerá no dia 20/06/2026, com início às 08h30.
+
+Recomendamos que peça aos alunos para chegarem ao campus às 08h00 para que possam se acomodar nos laboratórios de forma tranquila e estarem prontos para o ínicio às 08h30.
+
+Reforçem que eles só devem abrir o envelope de provas após o início da competição às 08h30, mesmo que tenham acesso ao envelope antes.
+
+Em caso de dúvida, entrem em contato o quanto antes.
+
+Um grande abraço, e até breve.
+Comissão organizadora {{ evento }}
+

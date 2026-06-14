@@ -1,0 +1,51 @@
+--- Obter lista de equipes
+
+uv run equipes_interif.py \
+       --campi 1Rgahq9BEP1aYralpEvSpidfgT0rEopJ_gaIKUpv2g0c \
+	   --teams 1OcMWMcFN3GV742Lh1PH6_9WCdN1ZKk8UvjhR9fkXmFk
+
+--- Verificar alunos em situação irregular
+
+uv run verifica_matriculas.py \
+       --graduacao incoming/alunos_graduacao_suap.csv \
+	   --medio incoming/alunos_medio_suap.csv --irregulares
+
+--- Validar CPFs
+
+uv run cpf_check.py \
+       -i
+
+--- Normalizar nomes dos cursos
+
+uv run lista_cursos.py \
+       --enriquecer
+
+--- Listar alunos duplicados
+
+uv run duplicatas_participantes.py
+
+--- Gerar gráficos e lista de equipes especiais
+
+uv run graficos_equipes.py \
+       --charts-dir graficos \
+	   --course-charts-by-campus \
+	   --output graficos/equipes_especiais.md
+
+--- Enviar mails
+
+uv run enviar_mensagem.py templates/equipes_inscritas_campus.j2 \
+       --coordenadores \
+	   --assunto "Lista FINAL de equipes inscritas para o {{ evento }}" --dry-run | bat
+
+uv run enviar_mensagem.py templates/equipes_por_coach.j2 \
+       --coaches \
+	   --assunto "Lista FINAL de equipes inscritas para o {{ evento }}" --dry-run | bat
+
+uv run enviar_mensagem.py templates/confirmacao_inscricao_equipe.j2 \
+       --participantes --por-equipe \
+	   --assunto "Confirmação de inscrição da equipe {{ equipe }} para o {{ evento }}" --dry-run | bat
+
+--- Verificar emails que retornaram
+
+uv run emails_rejeitados.py \
+       --query "from:mailer-daemon newer_than:5d"

@@ -1,0 +1,17 @@
+Prezado {{ coord_nome }},
+
+Durante o envio das confirmações de inscrição para os 655 alunos, mais de 100 emails retornaram por erro no preenchimento do email do aluno.
+
+Por  favor, verifiquem na lista abaixo o nome dos participantes e peçam para eles confirmarem o endereço de email registrado. Se estiver incorreto, o certificado de participação não será emitido. Orientem para que eles enviem o nome completo e o email correto para {{ email_organizacao }} ANTES do dia 18/06/2026.
+
+Segue a lista de todos os {{ total_participantes }} alunos registrados no seu campus.
+
+{% for p in equipes | map(attribute='participantes') | sum(start=[]) | sort(attribute='nome') %}
+{{ p.nome }} - {{ p.email }}{% endfor %}
+{# {% for e in equipes %}{% for p in e.participantes %}{{ p.nome}} - {{ p.email }}
+{% endfor %}{% endfor %} #}
+
+Obrigado
+Organização {{ evento }}
+
+

@@ -13,6 +13,11 @@ def mask_cpf(raw: str) -> str:
         return f"***.***.{d[6:9]}-{d[9:]}"
     return raw
 
+def mask_name(name: str) -> str:
+    parts = name.split()
+    if len(parts) <= 1:
+        return name
+    return parts[0] + " " + " ".join(f"{p[0]}." for p in parts[1:])
 
 def fmt_datetime(raw: str) -> str:
     raw = raw.strip()
@@ -37,8 +42,8 @@ def pessoa(nome: str, cpf: str) -> str:
 
 def build_html(rows: list[dict]) -> str:
     headers = [
-        "Campus",
-        "Equipe",
+#        "Campus",
+#        "Equipe",
         "Inscrição",
         "Coach",
         "Participante 1",
@@ -52,13 +57,13 @@ def build_html(rows: list[dict]) -> str:
 
     for r in rows:
         lines.append("<tr>")
-        lines.append(f"<td>{r['Campus'].strip()}</td>")
-        lines.append(f"<td>{r['Nome da Equipe'].strip()}</td>")
+#        lines.append(f"<td>{r['Campus'].strip()}</td>")
+#        lines.append(f"<td>{r['Nome da Equipe'].strip()}</td>")
         lines.append(f"<td>{fmt_datetime(r['Carimbo de data/hora'])}</td>")
-        lines.append(f"<td>{pessoa(r['Nome do Responsável pela Equipe'], r['CPF do Responsável pela Equipe'])}</td>")
-        lines.append(f"<td>{pessoa(r['Nome Participante 1'], r['CPF Participante 1'])}</td>")
-        lines.append(f"<td>{pessoa(r['Nome Participante 2'], r['CPF Participante 2'])}</td>")
-        lines.append(f"<td>{pessoa(r['Nome Participante 3'], r['CPF Participante 3'])}</td>")
+        lines.append(f"<td>{pessoa(mask_name(r['Nome do Responsável pela Equipe']), r['CPF do Responsável pela Equipe'])}</td>")
+        lines.append(f"<td>{pessoa(mask_name(r['Nome Participante 1']), r['CPF Participante 1'])}</td>")
+        lines.append(f"<td>{pessoa(mask_name(r['Nome Participante 2']), r['CPF Participante 2'])}</td>")
+        lines.append(f"<td>{pessoa(mask_name(r['Nome Participante 3']), r['CPF Participante 3'])}</td>")
         lines.append("</tr>")
 
     lines.append("</table>")

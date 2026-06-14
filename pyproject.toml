@@ -42,6 +42,7 @@ interif-graficos      = "graficos_equipes:main"        # python graficos_equipes
 interif-equipes-especiais = "graficos_equipes:main"    # compatibilidade
 interif-mensagem          = "enviar_mensagem:main"          # python enviar_mensagem.py
 interif-matriculas        = "verifica_matriculas:main"      # python verifica_matriculas.py
+interif-rejeitados        = "emails_rejeitados:main"        # python emails_rejeitados.py
 
 # ── Hatchling: inclui os scripts avulsos (sem __init__.py) ───────────────────
 [tool.hatch.build.targets.wheel]
