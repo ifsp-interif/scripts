@@ -140,6 +140,7 @@ def send_coord_group(
     subj_tmpl,
     cc: str | None,
     dry_run: bool,
+    attach: Path | None = None,
 ) -> tuple[int, int]:
     print("\n=== Emails para coordenadores de campus ===")
     sent = skipped = 0
@@ -169,7 +170,7 @@ def send_coord_group(
             print(f"  Erro ao renderizar template para {email}: {exc}", file=sys.stderr)
             skipped += 1
             continue
-        send_email(email, assunto, corpo, cc=cc, dry_run=dry_run)
+        send_email(email, assunto, corpo, cc=cc, attach=attach, dry_run=dry_run)
         sent += 1
     return sent, skipped
 
@@ -180,6 +181,7 @@ def send_coach_group(
     subj_tmpl,
     cc: str | None,
     dry_run: bool,
+    attach: Path | None = None,
 ) -> tuple[int, int]:
     print("\n=== Emails para coaches (responsáveis) ===")
     sent = skipped = 0
@@ -209,7 +211,7 @@ def send_coach_group(
             print(f"  Erro ao renderizar template para {email}: {exc}", file=sys.stderr)
             skipped += 1
             continue
-        send_email(email, assunto, corpo, cc=cc, dry_run=dry_run)
+        send_email(email, assunto, corpo, cc=cc, attach=attach, dry_run=dry_run)
         sent += 1
     return sent, skipped
 
@@ -222,9 +224,10 @@ def send_participantes_group(
     dry_run: bool,
     *,
     por_equipe: bool = False,
+    attach: Path | None = None,
 ) -> tuple[int, int]:
     if por_equipe:
-        return _send_participantes_por_equipe(teams, tmpl, subj_tmpl, cc, dry_run)
+        return _send_participantes_por_equipe(teams, tmpl, subj_tmpl, cc, dry_run, attach=attach)
     print("\n=== Emails para participantes (individual) ===")
     sent = skipped = 0
     for email, ctx in iter_participantes(teams):
@@ -238,7 +241,7 @@ def send_participantes_group(
             print(f"  Erro ao renderizar template para {email}: {exc}", file=sys.stderr)
             skipped += 1
             continue
-        send_email(email, assunto, corpo, cc=cc, dry_run=dry_run)
+        send_email(email, assunto, corpo, cc=cc, attach=attach, dry_run=dry_run)
         sent += 1
     return sent, skipped
 
@@ -249,6 +252,7 @@ def _send_participantes_por_equipe(
     subj_tmpl,
     cc: str | None,
     dry_run: bool,
+    attach: Path | None = None,
 ) -> tuple[int, int]:
     print("\n=== Emails para participantes (por equipe) ===")
     sent = skipped = 0
@@ -282,7 +286,7 @@ def _send_participantes_por_equipe(
         to = emails[0]
         equipe_cc = ", ".join(emails[1:]) if len(emails) > 1 else None
         combined_cc = ", ".join(filter(None, [equipe_cc, cc])) or None
-        send_email(to, assunto, corpo, cc=combined_cc, dry_run=dry_run)
+        send_email(to, assunto, corpo, cc=combined_cc, attach=attach, dry_run=dry_run)
         sent += 1
     return sent, skipped
 
@@ -342,6 +346,11 @@ def parse_args() -> argparse.Namespace:
         help="CC opcional para todos os envios",
     )
     parser.add_argument(
+        "--anexo",
+        metavar="ARQUIVO",
+        help="Caminho de um arquivo a ser anexado a todos os envios",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Simula o envio sem disparar emails",
@@ -370,6 +379,13 @@ def main() -> None:
         print(f"Erro: arquivo de template não encontrado: {template_path}", file=sys.stderr)
         sys.exit(1)
 
+    anexo: Path | None = None
+    if args.anexo:
+        anexo = Path(args.anexo)
+        if not anexo.is_file():
+            print(f"Erro: arquivo de anexo não encontrado: {anexo}", file=sys.stderr)
+            sys.exit(1)
+
     env = make_env()
     try:
         tmpl = env.from_string(template_path.read_text(encoding="utf-8"))
@@ -385,17 +401,17 @@ def main() -> None:
 
     if args.coordenadores:
         grupos = group_for_coord(teams)
-        s, sk = send_coord_group(grupos, tmpl, subj_tmpl, args.cc, args.dry_run)
+        s, sk = send_coord_group(grupos, tmpl, subj_tmpl, args.cc, args.dry_run, attach=anexo)
         totais.append(f"{s} coordenador(es) ({sk} ignorado(s))")
 
     if args.coaches:
         grupos = group_for_coach(teams)
-        s, sk = send_coach_group(grupos, tmpl, subj_tmpl, args.cc, args.dry_run)
+        s, sk = send_coach_group(grupos, tmpl, subj_tmpl, args.cc, args.dry_run, attach=anexo)
         totais.append(f"{s} coach(es) ({sk} ignorado(s))")
 
     if args.participantes:
         s, sk = send_participantes_group(
-            teams, tmpl, subj_tmpl, args.cc, args.dry_run, por_equipe=args.por_equipe
+            teams, tmpl, subj_tmpl, args.cc, args.dry_run, por_equipe=args.por_equipe, attach=anexo
         )
         modo = "equipe(s)" if args.por_equipe else "participante(s)"
         totais.append(f"{s} {modo} ({sk} ignorado(s))")
