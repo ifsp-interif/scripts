@@ -12,7 +12,13 @@ Destinatários:
 Uso:
     uv run python enviar_credenciais.py [--usuarios USUARIOS_TXT]
                                         [--csv CSV] [--campi CAMPI]
+                                        [--campus SIGLA]
+                                        [--so-coordenadores] [--so-responsaveis]
+                                        [--so-participantes]
                                         [--dry-run]
+
+As flags --so-* são combináveis e restringem o envio aos grupos escolhidos
+(pulando o email de resumo). Sem nenhuma delas, envia para todos os grupos.
 """
 
 import argparse
@@ -31,6 +37,7 @@ from interif_core import (
     CSV_FILE,
     CredencialEquipe,
     enriquecer,
+    filtrar_por_sigla,
     load_campi,
     load_teams,
     parse_usuarios,
@@ -293,9 +300,25 @@ def parse_args() -> argparse.Namespace:
         help=f"Mapeamento campus→sigla (padrão: {CAMPI_FILE})",
     )
     parser.add_argument(
+        "--campus",
+        default=None,
+        metavar="SIGLA",
+        help="Processa apenas o campus informado (sigla, ex.: SPO). Padrão: todos.",
+    )
+    parser.add_argument(
+        "--so-coordenadores",
+        action="store_true",
+        help="Envia apenas aos coordenadores de campus (combinável com as demais --so-*)",
+    )
+    parser.add_argument(
+        "--so-responsaveis",
+        action="store_true",
+        help="Envia apenas aos responsáveis pelas equipes (combinável com as demais --so-*)",
+    )
+    parser.add_argument(
         "--so-participantes",
         action="store_true",
-        help="Envia apenas aos participantes (pula coordenadores, técnicos e resumo)",
+        help="Envia apenas aos participantes (combinável com as demais --so-*)",
     )
     parser.add_argument(
         "--pular-enviados",
@@ -341,6 +364,18 @@ def main() -> None:
 
     credenciais = enriquecer(usuarios, teams_csv, campi, emit=print)
 
+    # Filtro opcional por campus (sigla)
+    if args.campus:
+        try:
+            credenciais = filtrar_por_sigla(credenciais, args.campus, campi)
+        except ValueError as exc:
+            print(f"Erro: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if not credenciais:
+            print(f"Nenhuma equipe encontrada para o campus {args.campus.upper()!r}.")
+            sys.exit(0)
+        print(f"Filtrando apenas o campus {args.campus.upper()!r}: {len(credenciais)} equipe(s).")
+
     ja_enviados: set[str] = set()
     if args.pular_enviados:
         log_path = Path(args.pular_enviados)
@@ -350,9 +385,19 @@ def main() -> None:
         ja_enviados = _enderecos_ja_enviados(log_path)
         print(f"{len(ja_enviados)} destinatário(s) já enviados serão pulados (de {log_path}).")
 
-    if args.so_participantes:
-        n_part = enviar_emails_participantes(credenciais, args.dry_run, ja_enviados)
-        total_emails = n_part
+    # Envio seletivo: se qualquer --so-* for passado, envia só os grupos escolhidos
+    # (e pula o resumo). As flags são combináveis. Sem nenhuma, envia para todos.
+    seletivo = args.so_coordenadores or args.so_responsaveis or args.so_participantes
+
+    n_coord = n_tec = n_part = 0
+    if seletivo:
+        if args.so_coordenadores:
+            n_coord = enviar_emails_coordenadores(credenciais, args.dry_run)
+        if args.so_responsaveis:
+            n_tec = enviar_emails_tecnicos(credenciais, args.dry_run)
+        if args.so_participantes:
+            n_part = enviar_emails_participantes(credenciais, args.dry_run, ja_enviados)
+        total_emails = n_coord + n_tec + n_part
     else:
         n_coord = enviar_emails_coordenadores(credenciais, args.dry_run)
         n_tec = enviar_emails_tecnicos(credenciais, args.dry_run)

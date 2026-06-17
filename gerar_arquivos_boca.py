@@ -70,7 +70,7 @@ def build_usuarios(
             linhas.append("usertype = team\n")
             linhas.append(f"userfullname = [IFSP - {label}] {cred.nome_equipe}\n")
             linhas.append("userenabled = t\n")
-            linhas.append("usermultilogin = t\n\n")
+            linhas.append("usermultilogin = f\n\n")
 
         linhas.append(f"usernumber = {staff_counter}\n")
         linhas.append(f"usersitenumber = {USERSITENUMBER}\n")

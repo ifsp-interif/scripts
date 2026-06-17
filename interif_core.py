@@ -101,6 +101,27 @@ def _emails_cred_para(team: dict) -> list[str]:
     return emails
 
 
+def _participantes_de(team: dict) -> list[dict]:
+    """
+    Participantes válidos da equipe, na ordem do CSV.
+    Cada item: {nome, email, prontuario, cpf}.  Ignora slots vazios ou '--'.
+    """
+    parts: list[dict] = []
+    for i in range(1, 4):
+        nome = team.get(f"part_{i}_nome", "").strip()
+        if not nome or nome == "--":
+            continue
+        parts.append(
+            {
+                "nome": team[f"part_{i}_nome"],
+                "email": team[f"part_{i}_email"],
+                "prontuario": team.get(f"part_{i}_prontuario", "").strip(),
+                "cpf": team.get(f"part_{i}_cpf", "").strip(),
+            }
+        )
+    return parts
+
+
 # ── Leitura de dados ──────────────────────────────────────────────────────────
 
 
@@ -122,34 +143,66 @@ def load_teams(path: Path) -> list[dict]:
     Lê equipes_interif.csv e devolve lista de dicts com todos os campos
     relevantes para geração de arquivos e envio de emails.
     Filtra linhas sem nome de equipe ou campus.
+
+    Lê por posição (csv.reader) em vez de csv.DictReader porque a coluna
+    'Prontuário' aparece três vezes no CSV (uma por participante, sempre logo
+    após o respectivo 'Nome Participante N') — DictReader colapsaria todas numa
+    só, mantendo apenas a última.
     """
     teams: list[dict] = []
     with open(path, newline="", encoding="utf-8-sig") as f:
-        for row in csv.DictReader(f):
-            nome = row.get("Nome da Equipe", "").strip()
-            campus = row.get("Campus", "").strip()
+        reader = csv.reader(f)
+        header = next(reader)
+
+        def col(nome: str) -> int:
+            """Índice da primeira ocorrência da coluna `nome`."""
+            return header.index(nome)
+
+        idx = {
+            "nome_equipe": col("Nome da Equipe"),
+            "campus": col("Campus"),
+            "coord_nome": col("Nome do Coordenador do Campus"),
+            "coord_email": col("Email do Coordenador do Campus"),
+            "resp_nome": col("Nome do Responsável pela Equipe"),
+            "resp_cpf": col("CPF do Responsável pela Equipe"),
+            "resp_email": col("Email do Responsável pela Equipe"),
+            "cred_para": col("Quem mais deve receber as credenciais de acesso?"),
+        }
+        # Participantes: nome, prontuário (coluna logo após o nome), CPF e email.
+        idx_part = {
+            i: {
+                "nome": col(f"Nome Participante {i}"),
+                "prontuario": col(f"Nome Participante {i}") + 1,
+                "cpf": col(f"CPF Participante {i}"),
+                "email": col(f"Email Participante {i}"),
+            }
+            for i in (1, 2, 3)
+        }
+
+        def get(row: list[str], i: int) -> str:
+            return row[i].strip() if i < len(row) else ""
+
+        for row in reader:
+            nome = get(row, idx["nome_equipe"])
+            campus = get(row, idx["campus"])
             if not nome or not campus:
                 continue
-            teams.append(
-                {
-                    "nome_equipe": nome,
-                    "campus": campus,
-                    "coord_nome": row.get("Nome do Coordenador do Campus", "").strip(),
-                    "coord_email": row.get("Email do Coordenador do Campus", "").strip().lower(),
-                    "resp_nome": row.get("Nome do Responsável pela Equipe", "").strip(),
-                    "resp_cpf": row.get("CPF do Responsável pela Equipe", "").strip(),
-                    "resp_email": row.get("Email do Responsável pela Equipe", "").strip().lower(),
-                    "part_1_nome": row.get("Nome Participante 1", "").strip(),
-                    "part_1_email": row.get("Email Participante 1", "").strip().lower(),
-                    "part_2_nome": row.get("Nome Participante 2", "").strip(),
-                    "part_2_email": row.get("Email Participante 2", "").strip().lower(),
-                    "part_3_nome": row.get("Nome Participante 3", "").strip(),
-                    "part_3_email": row.get("Email Participante 3", "").strip().lower(),
-                    "cred_para": row.get(
-                        "Quem mais deve receber as credenciais de acesso?", ""
-                    ).strip(),
-                }
-            )
+            team = {
+                "nome_equipe": nome,
+                "campus": campus,
+                "coord_nome": get(row, idx["coord_nome"]),
+                "coord_email": get(row, idx["coord_email"]).lower(),
+                "resp_nome": get(row, idx["resp_nome"]),
+                "resp_cpf": get(row, idx["resp_cpf"]),
+                "resp_email": get(row, idx["resp_email"]).lower(),
+                "cred_para": get(row, idx["cred_para"]),
+            }
+            for i, cols in idx_part.items():
+                team[f"part_{i}_nome"] = get(row, cols["nome"])
+                team[f"part_{i}_prontuario"] = get(row, cols["prontuario"])
+                team[f"part_{i}_cpf"] = get(row, cols["cpf"])
+                team[f"part_{i}_email"] = get(row, cols["email"]).lower()
+            teams.append(team)
     return teams
 
 
@@ -173,6 +226,25 @@ def validate(teams: list[dict], campi: dict[str, str]) -> list[str]:
         erros.append(f"{n_campus} campus encontrados, mas o limite é {MAX_CAMPUS} (MAX_CAMPUS).")
 
     return erros
+
+
+# ── Filtro por campus ─────────────────────────────────────────────────────────
+
+
+def filtrar_por_sigla(
+    credenciais: list["CredencialEquipe"],
+    sigla: str,
+    campi: dict[str, str],
+) -> list["CredencialEquipe"]:
+    """
+    Filtra credenciais por campus, comparando a sigla (case-insensitive).
+    Levanta ValueError se a sigla não existir no mapeamento de campi —
+    distingue 'sigla inválida' de 'campus sem equipes' (lista vazia).
+    """
+    alvo = sigla.strip().upper()
+    if alvo not in {s.upper() for s in campi.values()}:
+        raise ValueError(f"sigla de campus desconhecida: {sigla!r}")
+    return [c for c in credenciais if c.sigla.upper() == alvo]
 
 
 # ── Geração de credenciais ────────────────────────────────────────────────────
@@ -216,12 +288,7 @@ def gerar_credenciais(
         usernumber_base = blocos[bloco_idx]
 
         for n, team in enumerate(equipes, start=1):
-            participantes = [
-                {"nome": team[f"part_{i}_nome"], "email": team[f"part_{i}_email"]}
-                for i in range(1, 4)
-                if team.get(f"part_{i}_nome", "").strip()
-                and team.get(f"part_{i}_nome", "").strip() != "--"
-            ]
+            participantes = _participantes_de(team)
 
             credenciais.append(
                 CredencialEquipe(
@@ -348,12 +415,7 @@ def enriquecer(
         participantes: list[dict] = []
         emails_cred: list[str] = []
         if team:
-            participantes = [
-                {"nome": team[f"part_{i}_nome"], "email": team[f"part_{i}_email"]}
-                for i in range(1, 4)
-                if team.get(f"part_{i}_nome", "").strip()
-                and team.get(f"part_{i}_nome", "").strip() != "--"
-            ]
+            participantes = _participantes_de(team)
             emails_cred = _emails_cred_para(team)
 
         credenciais.append(
@@ -373,4 +435,36 @@ def enriquecer(
             )
         )
 
+    return credenciais
+
+
+def credenciais_de_csv(
+    teams_csv: list[dict],
+    campi: dict[str, str],
+) -> list[CredencialEquipe]:
+    """
+    Constrói CredencialEquipe diretamente do CSV de inscrições, sem depender de
+    usuarios.txt.  Usado pela lista de presença, que não usa username/senha — o
+    CSV de inscrições já tem tudo (equipe, participantes com prontuário/CPF,
+    coordenador e responsável).  Preserva a ordem do CSV.
+    """
+    credenciais: list[CredencialEquipe] = []
+    for team in teams_csv:
+        campus_raw = team["campus"]
+        credenciais.append(
+            CredencialEquipe(
+                campus=campus_raw,
+                sigla=campi.get(campus_raw, ""),
+                label=campus_raw,
+                nome_equipe=team["nome_equipe"],
+                username="",
+                password="",
+                coord_nome=team["coord_nome"],
+                coord_email=team["coord_email"],
+                resp_nome=team["resp_nome"],
+                resp_email=team["resp_email"],
+                participantes=_participantes_de(team),
+                emails_cred=_emails_cred_para(team),
+            )
+        )
     return credenciais

@@ -8,6 +8,7 @@ Importado por todos os scripts InterIF; sem dependências externas.
 
 TITULO_EVENTO = "IX InterIF — Fase Local"
 EMAIL_INTERIF = "interif@ifsp.edu.br"
+DATA_EVENTO = "2026-06-20"
 
 # ── BOCA ──────────────────────────────────────────────────────────────────────
 
@@ -123,4 +124,22 @@ PLACA_BODY_TEMPLATE = (
     "Seguem em anexo as placas de identificação das equipes do campus {campus} "
     f"para o {TITULO_EVENTO}.\n\n"
     f"Atenciosamente,\nOrganização {TITULO_EVENTO}"
+)
+
+# ── Lista de presença (gerar_lista_presenca.py) ──────────────────────────────
+# Placeholders em LISTA_BODY_TEMPLATE: {nome}, {campus}, {data_limite}.
+# Número de linhas de assinatura reservadas para os técnicos do campus.
+
+LISTA_PRAZO_DIAS = 7  # dias após DATA_EVENTO para envio da lista digitalizada
+LISTA_TECNICOS_LINHAS = 3
+LISTA_SUBJECT = f"Lista de presença — {TITULO_EVENTO}"
+LISTA_BODY_TEMPLATE = (
+    BANNER
+    + "Olá, {nome}!\n\n"
+    + "Segue em anexo a lista de presença das equipes do campus {campus} "
+    + f"para o {TITULO_EVENTO}.\n\n"
+    + "Por favor, imprima a lista, colete as assinaturas dos participantes no dia do "
+    + "evento e, após o término, digitalize e envie para "
+    + f"{EMAIL_INTERIF} até {{data_limite}}.\n\n"
+    + f"Atenciosamente,\nOrganização {TITULO_EVENTO}"
 )

@@ -11,6 +11,7 @@ Uso:
     uv run python gerar_placas.py [--usuarios output/usuarios.txt]
                                   [--csv equipes_interif.csv]
                                   [--campi assets/ifsp_campi.csv]
+                                  [--campus SIGLA]
                                   [-o placas/]
                                   [-s / --send]
                                   [--dry-run]
@@ -52,6 +53,7 @@ from interif_core import (
     CSV_FILE,
     CredencialEquipe,
     enriquecer,
+    filtrar_por_sigla,
     load_campi,
     load_teams,
     parse_usuarios,
@@ -292,6 +294,12 @@ def parse_args() -> argparse.Namespace:
         help=f"Mapeamento campus→sigla (padrão: {CAMPI_FILE})",
     )
     parser.add_argument(
+        "--campus",
+        default=None,
+        metavar="SIGLA",
+        help="Processa apenas o campus informado (sigla, ex.: SPO). Padrão: todos.",
+    )
+    parser.add_argument(
         "-o",
         "--output",
         default="placas",
@@ -348,6 +356,18 @@ def main() -> None:
     print(f"{len(usuarios)} equipe(s) em usuarios.txt | {len(teams_csv)} linha(s) no CSV.\n")
 
     credenciais = enriquecer(usuarios, teams_csv, campi, emit=print)
+
+    # Filtro opcional por campus (sigla)
+    if args.campus:
+        try:
+            credenciais = filtrar_por_sigla(credenciais, args.campus, campi)
+        except ValueError as exc:
+            print(f"Erro: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if not credenciais:
+            print(f"Nenhuma equipe encontrada para o campus {args.campus.upper()!r}.")
+            sys.exit(0)
+        print(f"Filtrando apenas o campus {args.campus.upper()!r}: {len(credenciais)} equipe(s).\n")
 
     # Agrupa por campus
     por_campus: dict[str, list[CredencialEquipe]] = defaultdict(list)
