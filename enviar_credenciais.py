@@ -16,6 +16,7 @@ Uso:
 """
 
 import argparse
+import re
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -37,6 +38,25 @@ from interif_core import (
 
 _HERE = Path(__file__).parent
 USUARIOS_FILE = _HERE / "output" / "usuarios.txt"
+
+
+def _enderecos_ja_enviados(path: Path) -> set[str]:
+    """
+    Lê um log de execução anterior (stdout do script / formato gws) e devolve o
+    conjunto de endereços que obtiveram 'OK: enviado'. Usado para retomar um envio
+    interrompido sem reenviar para quem já recebeu.
+    """
+    ok: set[str] = set()
+    ultimo: str | None = None
+    for linha in path.read_text(encoding="utf-8").splitlines():
+        m = re.search(r"Enviando para (\S+) \.\.\.", linha)
+        if m:
+            ultimo = m.group(1)
+        elif "OK: enviado" in linha and ultimo:
+            ok.add(ultimo)
+            ultimo = None
+    return ok
+
 
 # ── Envio de emails ───────────────────────────────────────────────────────────
 
@@ -131,16 +151,29 @@ def enviar_emails_tecnicos(
 def enviar_emails_participantes(
     credenciais: list[CredencialEquipe],
     dry_run: bool,
+    ja_enviados: set[str] | None = None,
 ) -> int:
     """
     Para cada equipe cujos participantes optaram por receber credenciais,
     envia um único email (--to primeiro, --cc demais).
+
+    Equipes cujo destinatário primário já consta em `ja_enviados` são puladas
+    (retomada de um envio interrompido). Uma falha em uma equipe é registrada e
+    não interrompe o lote; o resumo das falhas é impresso ao final.
     """
     print("\n── Participantes indicados")
+    ja_enviados = ja_enviados or set()
 
     count = 0
+    pulados = 0
+    falhas: list[tuple[str, str, str]] = []  # (equipe, to, motivo)
     for cred in credenciais:
         if not cred.emails_cred:
+            continue
+
+        to = cred.emails_cred[0]
+        if to in ja_enviados:
+            pulados += 1
             continue
 
         body = (
@@ -151,17 +184,27 @@ def enviar_emails_participantes(
             f"Atenciosamente,\nOrganização {TITULO_EVENTO}"
         )
 
-        to = cred.emails_cred[0]
         cc = ",".join(cred.emails_cred[1:]) if len(cred.emails_cred) > 1 else None
 
-        send_email(
-            to,
-            f"{EMAIL_SUBJECT_PREFIX} — Equipe {cred.nome_equipe}",
-            body,
-            cc=cc,
-            dry_run=dry_run,
-        )
-        count += 1
+        try:
+            send_email(
+                to,
+                f"{EMAIL_SUBJECT_PREFIX} — Equipe {cred.nome_equipe}",
+                body,
+                cc=cc,
+                dry_run=dry_run,
+            )
+            count += 1
+        except Exception as exc:  # noqa: BLE001 — registra e segue o lote
+            falhas.append((cred.nome_equipe, to, str(exc).splitlines()[-1]))
+
+    if pulados:
+        print(f"  ({pulados} equipe(s) puladas — já enviadas)")
+
+    if falhas:
+        print(f"\n  ⚠ {len(falhas)} equipe(s) falharam:")
+        for equipe, to, motivo in falhas:
+            print(f"    - {equipe} ({to}): {motivo}")
 
     return count
 
@@ -250,6 +293,20 @@ def parse_args() -> argparse.Namespace:
         help=f"Mapeamento campus→sigla (padrão: {CAMPI_FILE})",
     )
     parser.add_argument(
+        "--so-participantes",
+        action="store_true",
+        help="Envia apenas aos participantes (pula coordenadores, técnicos e resumo)",
+    )
+    parser.add_argument(
+        "--pular-enviados",
+        default=None,
+        metavar="LOG",
+        help=(
+            "Log de uma execução anterior; equipes cujo destinatário já obteve "
+            "'OK: enviado' são puladas (retomada de envio interrompido)"
+        ),
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Simula o envio sem disparar emails reais",
@@ -284,11 +341,24 @@ def main() -> None:
 
     credenciais = enriquecer(usuarios, teams_csv, campi, emit=print)
 
-    n_coord = enviar_emails_coordenadores(credenciais, args.dry_run)
-    n_tec = enviar_emails_tecnicos(credenciais, args.dry_run)
-    n_part = enviar_emails_participantes(credenciais, args.dry_run)
-    enviar_resumo(credenciais, n_coord, n_tec, n_part, args.dry_run)
-    total_emails = n_coord + n_tec + n_part + 1
+    ja_enviados: set[str] = set()
+    if args.pular_enviados:
+        log_path = Path(args.pular_enviados)
+        if not log_path.exists():
+            print(f"Erro: log não encontrado: {log_path}", file=sys.stderr)
+            sys.exit(1)
+        ja_enviados = _enderecos_ja_enviados(log_path)
+        print(f"{len(ja_enviados)} destinatário(s) já enviados serão pulados (de {log_path}).")
+
+    if args.so_participantes:
+        n_part = enviar_emails_participantes(credenciais, args.dry_run, ja_enviados)
+        total_emails = n_part
+    else:
+        n_coord = enviar_emails_coordenadores(credenciais, args.dry_run)
+        n_tec = enviar_emails_tecnicos(credenciais, args.dry_run)
+        n_part = enviar_emails_participantes(credenciais, args.dry_run, ja_enviados)
+        enviar_resumo(credenciais, n_coord, n_tec, n_part, args.dry_run)
+        total_emails = n_coord + n_tec + n_part + 1
 
     print()
     render_summary(credenciais, total_emails, dry_run=args.dry_run)
