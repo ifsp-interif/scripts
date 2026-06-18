@@ -25,6 +25,8 @@ dependencies = [
     "matplotlib>=3.8",
     # templates de mala direta
     "jinja2>=3.0",
+    # geração de XLSX para importação no SUAP
+    "openpyxl>=3.1",
     # testes
     "pytest>=8.0",
 ]
@@ -43,6 +45,7 @@ interif-equipes-especiais = "graficos_equipes:main"    # compatibilidade
 interif-mensagem          = "enviar_mensagem:main"          # python enviar_mensagem.py
 interif-matriculas        = "verifica_matriculas:main"      # python verifica_matriculas.py
 interif-rejeitados        = "emails_rejeitados:main"        # python emails_rejeitados.py
+interif-inscricoes-suap   = "gerar_inscricoes_suap:main"    # python gerar_inscricoes_suap.py
 
 # ── Hatchling: inclui os scripts avulsos (sem __init__.py) ───────────────────
 [tool.hatch.build.targets.wheel]
