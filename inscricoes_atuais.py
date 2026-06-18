@@ -12,6 +12,7 @@ from config import (
     COORD_SUBJECT,
     NO_TEAMS_BODY,
     NO_TEAMS_SUBJECT,
+    NO_TEAMS_SUMMARY_BODY,
     RESP_POST,
     RESP_PRE,
     RESP_SUBJECT,
@@ -189,12 +190,9 @@ def send_no_teams_summary_email(no_teams_coordinators: list[dict], dry_run: bool
     print("\n=== Email de resumo para a organização ===")
     lines = "\n".join(f"- {coord['campus']}" for coord in no_teams_coordinators)
     total = len(no_teams_coordinators)
-    body = (
-        "Seguem abaixo os campi sem equipes inscritas:\n\n"
-        + (lines or "- Nenhum campus sem equipes inscritas")
-        + f"\n\nTotal: {total} campus sem equipes inscritas"
-        + "\n"
-        + SUMMARY_POST
+    body = NO_TEAMS_SUMMARY_BODY.format(
+        linhas=lines or "- Nenhum campus sem equipes inscritas",
+        total=total,
     )
     send_email(SUMMARY_TO, f"{NO_TEAMS_SUBJECT} — resumo {_TIMESTAMP}", body, dry_run=dry_run)
 

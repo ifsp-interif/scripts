@@ -9,6 +9,7 @@ Importado por todos os scripts InterIF; sem dependências externas.
 TITULO_EVENTO = "IX InterIF — Fase Local"
 EMAIL_INTERIF = "interif@ifsp.edu.br"
 DATA_EVENTO = "2026-06-20"
+URL_BOCA = "https://boca.ifsp.edu.br/"
 
 # ── BOCA ──────────────────────────────────────────────────────────────────────
 
@@ -60,6 +61,15 @@ NO_TEAMS_BODY = (
     + f"Organização {TITULO_EVENTO}"
 )
 
+# Placeholders: {linhas} (lista de campi, uma por linha), {total}  (preenchidos em runtime)
+NO_TEAMS_SUMMARY_BODY = (
+    BANNER
+    + "Seguem abaixo os campi sem equipes inscritas:\n\n"
+    + "{linhas}\n\n"
+    + "Total: {total} campi sem equipes inscritas\n"
+    + SUMMARY_POST
+)
+
 # ── Notificação de CPF inválido (cpf_check.py) ────────────────────────────────
 # Placeholders disponíveis: {nome}, {cpf}, {interif_email}  (preenchidos em runtime)
 
@@ -93,8 +103,33 @@ DUPLICATA_BODY = (
 )
 
 # ── Credenciais de acesso (enviar_credenciais.py) ─────────────────────────────
+# Placeholders: {nome_equipe}  (preenchidos em runtime)
 
 CRED_SUBJECT_PREFIX = f"Credenciais de acesso — {TITULO_EVENTO}"
+CRED_BODY_TEMPLATE = (
+    BANNER
+    + "Prezado(a) participante,\n\n"
+    + f"Segue o acesso da equipe {{nome_equipe}} para o {TITULO_EVENTO}:\n\n"
+    + "Login: {username}\n"
+    + "Senha: {password}\n\n"
+    + f"Atenciosamente,\nOrganização {TITULO_EVENTO}"
+)
+
+# ── Credenciais de staff e placar (enviar_credenciais.py --enviar-staff) ──────
+# Placeholders: {nome}, {campus}, {linhas_staff}, {linhas_score}  (preenchidos em runtime)
+# {linhas_staff} e {linhas_score} são blocos pré-formatados com "Login: X\nSenha: Y\n"
+
+STAFF_SUBJECT = f"Credenciais de staff e placar — {TITULO_EVENTO}"
+STAFF_BODY_TEMPLATE = (
+    BANNER
+    + "Olá, {nome}!\n\n"
+    + f"Seguem as credenciais de acesso operacional do {TITULO_EVENTO} para o campus {{campus}}.\n\n"
+    + "── Usuário(s) de staff (pedidos de impressão, entrega de balões e atendimento às equipes) ──\n\n"
+    + "{linhas_staff}\n"
+    + "── Usuário(s) de placar (projeção do scoreboard) ──\n\n"
+    + "{linhas_score}\n"
+    + f"Atenciosamente,\nOrganização {TITULO_EVENTO}"
+)
 
 # ── Etiquetas de credenciais (gerar_etiquetas.py) ────────────────────────────────
 # Fonte monospaced usada para username/password. O arquivo deve existir em assets/.
@@ -106,6 +141,9 @@ ETIQ_BODY_TEMPLATE = (
     + "Olá, {nome}!\n\n"
     + "Segue em anexo as etiquetas de credenciais das equipes do campus {campus} "
     + f"para o {TITULO_EVENTO}.\n\n"
+    + "Lembramos que o enderço para acesso ao sistema de submissão é\n\n"
+    + f"{URL_BOCA}\n\n"
+    + f"Cada equipe só pode logar em uma máquina por vez, não sendo permitido login simultâneo\n\n"
     + f"Atenciosamente,\nOrganização {TITULO_EVENTO}"
 )
 
@@ -114,8 +152,10 @@ ETIQ_COACH_BODY_TEMPLATE = (
     BANNER
     + "Olá, {nome}!\n\n"
     + "Segue em anexo as etiquetas de credenciais da(s) equipe(s) sob sua responsabilidade "
-    + "no campus {campus} "
-    + f"para o {TITULO_EVENTO}.\n\n"
+    + f"no campus {{campus}} para o {TITULO_EVENTO}.\n\n"
+    + "Lembramos que o enderço para acesso ao sistema de submissão é\n\n"
+    + f"{URL_BOCA}\n\n"
+    + f"Cada equipe só pode logar em uma máquina por vez, não sendo permitido login simultâneo\n\n"
     + f"Atenciosamente,\nOrganização {TITULO_EVENTO}"
 )
 

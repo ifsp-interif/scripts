@@ -365,6 +365,52 @@ def parse_usuarios(path: Path) -> list[dict]:
     return usuarios
 
 
+_STAFF_SIGLA_RE = re.compile(r"^staff\d*([a-z]+)$", re.IGNORECASE)
+
+
+def parse_staff_e_score(path: Path) -> tuple[dict[str, list[dict]], list[dict]]:
+    """
+    Lê usuarios.txt e devolve:
+      - staff_por_sigla: {SIGLA: [{username, password}, ...]} para usertype=staff.
+        Extrai a sigla do username pelo padrão staff[dígitos?][sigla]
+        (ex.: 'staffarq' → 'ARQ', 'staff2spo' → 'SPO').
+        Pode haver múltiplos usuários staff por campus.
+      - score_users: [{username, password}, ...] para todos os usertype=score.
+        Todos os campi recebem a lista completa.
+    """
+    staff: dict[str, list[dict]] = {}
+    score_users: list[dict] = []
+    atual: dict[str, str] = {}
+
+    def _commit(rec: dict[str, str]) -> None:
+        utype = rec.get("usertype", "")
+        uname = rec.get("username", "")
+        entry = {"username": uname, "password": rec.get("userpassword", "")}
+        if utype == "staff":
+            m = _STAFF_SIGLA_RE.match(uname)
+            if m:
+                sigla = m.group(1).upper()
+                staff.setdefault(sigla, []).append(entry)
+        elif utype == "score":
+            score_users.append(entry)
+
+    with open(path, encoding="utf-8") as f:
+        for linha in f:
+            linha = linha.rstrip("\n")
+            if "=" not in linha:
+                if atual:
+                    _commit(atual)
+                atual = {}
+                continue
+            chave, _, valor = linha.partition("=")
+            atual[chave.strip()] = valor.strip()
+
+    if atual:
+        _commit(atual)
+
+    return staff, score_users
+
+
 _FULLNAME_RE = re.compile(r"^\[IFSP\s*-\s*[^\]]+\]\s*(.+)$")
 
 

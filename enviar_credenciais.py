@@ -29,8 +29,8 @@ from pathlib import Path
 
 from tabulate import tabulate
 
-from config import CRED_SUBJECT_PREFIX as EMAIL_SUBJECT_PREFIX
-from config import EMAIL_INTERIF, TITULO_EVENTO
+from config import CRED_BODY_TEMPLATE, CRED_SUBJECT_PREFIX as EMAIL_SUBJECT_PREFIX
+from config import EMAIL_INTERIF, STAFF_BODY_TEMPLATE, STAFF_SUBJECT, TITULO_EVENTO
 from email_utils import send_email
 from interif_core import (
     CAMPI_FILE,
@@ -40,6 +40,7 @@ from interif_core import (
     filtrar_por_sigla,
     load_campi,
     load_teams,
+    parse_staff_e_score,
     parse_usuarios,
 )
 
@@ -183,12 +184,10 @@ def enviar_emails_participantes(
             pulados += 1
             continue
 
-        body = (
-            f"Prezado(a) participante,\n\n"
-            f"Segue o acesso da equipe {cred.nome_equipe} para o {TITULO_EVENTO}:\n\n"
-            f"Login: {cred.username}\n"
-            f"Senha: {cred.password}\n\n"
-            f"Atenciosamente,\nOrganização {TITULO_EVENTO}"
+        body = CRED_BODY_TEMPLATE.format(
+            nome_equipe=cred.nome_equipe,
+            username=cred.username,
+            password=cred.password,
         )
 
         cc = ",".join(cred.emails_cred[1:]) if len(cred.emails_cred) > 1 else None
@@ -212,6 +211,57 @@ def enviar_emails_participantes(
         print(f"\n  ⚠ {len(falhas)} equipe(s) falharam:")
         for equipe, to, motivo in falhas:
             print(f"    - {equipe} ({to}): {motivo}")
+
+    return count
+
+
+def _formatar_credenciais(users: list[dict]) -> str:
+    return "".join(f"Login: {u['username']}\nSenha: {u['password']}\n\n" for u in users)
+
+
+def enviar_emails_staff(
+    credenciais: list[CredencialEquipe],
+    staff_por_sigla: dict[str, list[dict]],
+    score_users: list[dict],
+    dry_run: bool,
+) -> int:
+    """
+    Envia um email por campus ao coordenador com as credenciais dos usuários
+    de staff daquele campus e de todos os usuários de placar (score).
+    """
+    print("\n── Credenciais de staff e placar para coordenadores")
+
+    if not score_users:
+        print("  Aviso: nenhum usuário score encontrado em usuarios.txt")
+
+    linhas_score = _formatar_credenciais(score_users) if score_users else "  (nenhum)\n\n"
+
+    # Deduplica por campus usando o primeiro CredencialEquipe de cada sigla
+    por_sigla: dict[str, CredencialEquipe] = {}
+    for cred in credenciais:
+        if cred.sigla not in por_sigla:
+            por_sigla[cred.sigla] = cred
+
+    count = 0
+    for sigla, cred in sorted(por_sigla.items()):
+        if not cred.coord_email:
+            print(f"  Aviso: campus {sigla} sem email de coordenador — pulado")
+            continue
+
+        staff_campus = staff_por_sigla.get(sigla, [])
+        if not staff_campus:
+            print(f"  Aviso: campus {sigla} sem usuário staff em usuarios.txt — email enviado mesmo assim")
+
+        linhas_staff = _formatar_credenciais(staff_campus) if staff_campus else "  (nenhum)\n\n"
+
+        body = STAFF_BODY_TEMPLATE.format(
+            nome=cred.primeiro_nome_coord,
+            campus=cred.campus,
+            linhas_staff=linhas_staff,
+            linhas_score=linhas_score,
+        )
+        send_email(cred.coord_email, STAFF_SUBJECT, body, dry_run=dry_run)
+        count += 1
 
     return count
 
@@ -306,6 +356,14 @@ def parse_args() -> argparse.Namespace:
         help="Processa apenas o campus informado (sigla, ex.: SPO). Padrão: todos.",
     )
     parser.add_argument(
+        "--enviar-staff",
+        action="store_true",
+        help=(
+            "Envia credenciais de staff e placar aos coordenadores de campus. "
+            "Pode ser combinado com --so-* ou usado isoladamente."
+        ),
+    )
+    parser.add_argument(
         "--so-coordenadores",
         action="store_true",
         help="Envia apenas aos coordenadores de campus (combinável com as demais --so-*)",
@@ -384,6 +442,17 @@ def main() -> None:
             sys.exit(1)
         ja_enviados = _enderecos_ja_enviados(log_path)
         print(f"{len(ja_enviados)} destinatário(s) já enviados serão pulados (de {log_path}).")
+
+    if args.enviar_staff and (args.so_coordenadores or args.so_responsaveis or args.so_participantes):
+        print("Erro: --enviar-staff não pode ser combinado com --so-*.", file=sys.stderr)
+        sys.exit(1)
+
+    if args.enviar_staff:
+        staff_por_sigla, score_users = parse_staff_e_score(usuarios_path)
+        n_staff = enviar_emails_staff(credenciais, staff_por_sigla, score_users, args.dry_run)
+        print()
+        render_summary(credenciais, n_staff, dry_run=args.dry_run)
+        return
 
     # Envio seletivo: se qualquer --so-* for passado, envia só os grupos escolhidos
     # (e pula o resumo). As flags são combináveis. Sem nenhuma, envia para todos.
