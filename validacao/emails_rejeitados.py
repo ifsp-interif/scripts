@@ -27,9 +27,13 @@ from pathlib import Path
 
 from tabulate import tabulate
 
-from interif_core import CSV_FILE, load_teams
+ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
-_OUTPUT_CSV = Path(__file__).parent / "emails_rejeitados.csv"
+from interif_core import CSV_FILE, load_teams  # noqa: E402
+
+_OUTPUT_CSV = ROOT_DIR / "emails_rejeitados.csv"
 
 # Notificações de falha do Gmail (mailer-daemon).
 _QUERY_PADRAO = "from:mailer-daemon subject:(Delivery Status Notification Failure)"
@@ -182,7 +186,7 @@ def render_report(
     if fora_do_csv:
         lines.append("")
         lines.append("Endereços rejeitados que NÃO estão no CSV (verifique manualmente):")
-        for email, data in sorted(fora_do_csv):
+        for email, _data in sorted(fora_do_csv):
             lines.append(f"  {email}")
 
     return "\n".join(lines)

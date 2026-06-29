@@ -20,10 +20,14 @@ from pathlib import Path
 import cpf as cpflib
 from tabulate import tabulate
 
-from config import EMAIL_INTERIF as INTERIF_EMAIL
-from config import NOTIFY_BODY, NOTIFY_SUBJECT
+ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
-CSV_FILE = Path(__file__).parent / "equipes_interif.csv"
+from config import EMAIL_INTERIF as INTERIF_EMAIL  # noqa: E402
+from config import NOTIFY_BODY, NOTIFY_SUBJECT  # noqa: E402
+
+CSV_FILE = ROOT_DIR / "equipes_interif.csv"
 
 # Mapeamento: coluna de CPF → (coluna de nome, coluna de email, papel)
 _CPF_COL_MAP: dict[str, tuple[str, str, str]] = {

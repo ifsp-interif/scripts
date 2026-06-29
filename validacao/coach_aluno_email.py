@@ -2,8 +2,14 @@
 """Lista equipes cujo coach possui email @aluno.ifsp.edu.br."""
 
 import argparse
+import sys
+from pathlib import Path
 
-from inscricoes_atuais import CSV_FILE, load_teams
+ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+from interif_core import CSV_FILE, load_teams  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:
@@ -23,9 +29,9 @@ def main() -> None:
         return
 
     print(f"{len(flagged)} equipe(s) com coach de email @aluno.ifsp.edu.br:\n")
-    for t in sorted(flagged, key=lambda t: (t["campus"], t["equipe"])):
+    for t in sorted(flagged, key=lambda t: (t["campus"], t["nome_equipe"])):
         print(f"  Campus : {t['campus']}")
-        print(f"  Equipe : {t['equipe']}")
+        print(f"  Equipe : {t['nome_equipe']}")
         print(f"  Coach  : {t['resp_nome']} <{t['resp_email']}>")
         print()
 

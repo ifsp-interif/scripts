@@ -3,9 +3,13 @@
 Verifica se os participantes das equipes InterIF estão matriculados no IFSP.
 
 Uso:
+    # Combina graduação + médio em matriculados.csv e verifica os participantes:
     uv run python verifica_matriculas.py --graduacao alunos_grad.csv --medio alunos_medio.csv
     uv run python verifica_matriculas.py --graduacao alunos_grad.csv --medio alunos_medio.csv \\
         -i equipes_interif.csv -m matriculados.csv -o alunos_irregulares.txt
+
+    # Usa um matriculados.csv já existente, sem recombinar graduação + médio:
+    uv run python verifica_matriculas.py -m matriculados.csv -i equipes_interif.csv
 """
 
 import argparse
@@ -16,9 +20,11 @@ from pathlib import Path
 
 from tabulate import tabulate
 
-_EQUIPES_CSV = Path(__file__).parent / "equipes_interif.csv"
-_MATRICULADOS_CSV = Path(__file__).parent / "matriculados.csv"
-_OUTPUT_TXT = Path(__file__).parent / "alunos_irregulares.txt"
+ROOT_DIR = Path(__file__).resolve().parents[1]
+
+_EQUIPES_CSV = ROOT_DIR / "equipes_interif.csv"
+_MATRICULADOS_CSV = ROOT_DIR / "matriculados.csv"
+_OUTPUT_TXT = ROOT_DIR / "alunos_irregulares.txt"
 
 # Índices fixos no equipes_interif.csv (verificados no cabeçalho)
 _CAMPUS_IDX = 3
@@ -61,21 +67,22 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--graduacao",
         metavar="ARQUIVO",
-        required=True,
-        help="CSV de alunos da graduação",
+        help="CSV de alunos da graduação (combinado com --medio em --matriculados)",
     )
     parser.add_argument(
         "--medio",
         metavar="ARQUIVO",
-        required=True,
-        help="CSV de alunos do ensino médio",
+        help="CSV de alunos do ensino médio (combinado com --graduacao em --matriculados)",
     )
     parser.add_argument(
         "--matriculados",
         "-m",
         metavar="ARQUIVO",
         default=str(_MATRICULADOS_CSV),
-        help=f"Onde salvar o CSV filtrado de matriculados (padrão: {_MATRICULADOS_CSV.name})",
+        help=(
+            "CSV de matriculados. Com --graduacao/--medio, é onde o CSV combinado é salvo; "
+            f"sozinho, é lido como entrada já existente (padrão: {_MATRICULADOS_CSV.name})"
+        ),
     )
     parser.add_argument(
         "--input",
@@ -127,12 +134,25 @@ def load_matriculados(grad_path: Path, medio_path: Path, out_path: Path) -> set[
     return matriculas
 
 
+def load_matriculas_from_file(path: Path) -> set[str]:
+    matriculas: set[str] = set()
+    with open(path, newline="", encoding="utf-8-sig") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            matricula = row.get(_MATRICULA_COL, "").strip()
+            if matricula:
+                matriculas.add(matricula.upper())
+
+    print(f"  {len(matriculas)} matrículas únicas ← {path}")
+    return matriculas
+
+
 def _validate_equipes_header(header: list[str], path: Path) -> None:
     if len(header) < _MIN_COLS:
         raise ValueError(
             f"{path}: cabeçalho com {len(header)} colunas; esperado ao menos {_MIN_COLS}"
         )
-    for nome_idx, pron_idx in _PARTICIPANTS:
+    for _nome_idx, pron_idx in _PARTICIPANTS:
         if header[pron_idx] != "Prontuário":
             raise ValueError(
                 f"{path}: coluna {pron_idx} esperada 'Prontuário', encontrada '{header[pron_idx]}'"
@@ -200,23 +220,44 @@ def render_report(
 def main() -> None:
     args = parse_args()
 
-    grad_path = Path(args.graduacao)
-    medio_path = Path(args.medio)
     equipes_path = Path(args.input)
     matriculados_path = Path(args.matriculados)
     output_path = Path(args.output)
 
-    for path in (grad_path, medio_path, equipes_path):
-        if not path.exists():
-            print(f"Erro: arquivo não encontrado: {path}", file=sys.stderr)
-            sys.exit(1)
-
-    print("Carregando matriculados...")
-    try:
-        matriculas = load_matriculados(grad_path, medio_path, matriculados_path)
-    except (OSError, csv.Error) as exc:
-        print(f"Erro ao ler CSVs de alunos: {exc}", file=sys.stderr)
+    combinar = bool(args.graduacao or args.medio)
+    if combinar and not (args.graduacao and args.medio):
+        print(
+            "Erro: --graduacao e --medio devem ser usados juntos.",
+            file=sys.stderr,
+        )
         sys.exit(1)
+
+    if combinar:
+        grad_path = Path(args.graduacao)
+        medio_path = Path(args.medio)
+        for path in (grad_path, medio_path, equipes_path):
+            if not path.exists():
+                print(f"Erro: arquivo não encontrado: {path}", file=sys.stderr)
+                sys.exit(1)
+
+        print("Carregando matriculados (graduação + médio)...")
+        try:
+            matriculas = load_matriculados(grad_path, medio_path, matriculados_path)
+        except (OSError, csv.Error) as exc:
+            print(f"Erro ao ler CSVs de alunos: {exc}", file=sys.stderr)
+            sys.exit(1)
+    else:
+        for path in (matriculados_path, equipes_path):
+            if not path.exists():
+                print(f"Erro: arquivo não encontrado: {path}", file=sys.stderr)
+                sys.exit(1)
+
+        print(f"Carregando matriculados de {matriculados_path}...")
+        try:
+            matriculas = load_matriculas_from_file(matriculados_path)
+        except (OSError, csv.Error) as exc:
+            print(f"Erro ao ler CSV de matriculados: {exc}", file=sys.stderr)
+            sys.exit(1)
 
     print("\nCarregando participantes das equipes...")
     try:

@@ -17,11 +17,15 @@ from pathlib import Path
 
 from tabulate import tabulate
 
-from config import DUPLICATA_BODY, DUPLICATA_SUBJECT, EMAIL_INTERIF, TITULO_EVENTO
-from email_utils import send_email
-from interif_core import CAMPI_FILE, load_campi
+ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
-CSV_FILE = Path(__file__).parent / "equipes_interif.csv"
+from config import DUPLICATA_BODY, DUPLICATA_SUBJECT, EMAIL_INTERIF, TITULO_EVENTO  # noqa: E402
+from email_utils import send_email  # noqa: E402
+from interif_core import CAMPI_FILE, load_campi  # noqa: E402
+
+CSV_FILE = ROOT_DIR / "equipes_interif.csv"
 
 _CPF_RE = re.compile(r"\b(\d{3}[.\-]?\d{3}[.\-]?\d{3}[.\-]?\d{2})\b")
 
