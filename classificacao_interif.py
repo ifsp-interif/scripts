@@ -14,20 +14,31 @@ Critérios (em ordem de aplicação):
 
 import argparse
 import csv
-import json
 import subprocess
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import matplotlib
 import matplotlib.pyplot as plt
+import openpyxl
+
+from equipes_roster import (
+    CAMPUS_COL,
+    SHEET_NAME,
+    TEAM_NAME_COL,
+    build_coord_map,
+    build_output_headers,
+    build_team_row,
+    get,
+    read_sheet,
+)
 
 matplotlib.use("Agg")
 
-SHEET_NAME = "Respostas ao formulário 1"
 OUTPUT_FILE = Path(__file__).parent / "classificados_interif.csv"
 CHART_FILE = Path(__file__).parent / "classificados_interif.png"
+FINAL_OUTPUT_FILE = Path(__file__).parent / "equipes_interif_final.csv"
 
 def _parse_women_count(value: str) -> int | None:
     value = value.strip()
@@ -47,10 +58,9 @@ SCORE_HEADER = "Classificação na prova da Fase Local"
 WOMEN_HEADER = "Quantas mulheres na equipe?"
 HIGH_SCHOOL_HEADER = "Composta apenas por alunos do ensino médio?"
 
-# Posições fixas no sheet bruto (mesmas constantes de equipes_interif.py).
-# Esses campos têm nomes originais do Google Forms que diferem dos nomes canônicos.
-_TEAM_NAME_COL = 2
-_CAMPUS_COL = 3
+# Posições fixas no sheet bruto. Esses campos têm nomes originais do Google
+# Forms que diferem dos nomes canônicos; TEAM_NAME_COL e CAMPUS_COL vêm de
+# equipes_roster (compartilhados com equipes_interif.py).
 _PART_NOME_COLS = [11, 18, 25]  # Nome Participante 1, 2, 3
 
 
@@ -63,30 +73,11 @@ class Team:
     apenas_medio: bool
     participantes: int  # número de slots preenchidos
     part_nomes: list[str]  # sempre 3 elementos; vazio = ""
+    # Linha completa no formato equipes_interif.csv, para o recorte final.
+    source_row: list[str] = field(default_factory=list)
 
 
 # ── I/O helpers ───────────────────────────────────────────────────────────────
-
-
-def read_sheet(spreadsheet_id: str, sheet_name: str) -> tuple[list[str], list[list[str]]]:
-    result = subprocess.run(
-        ["gws", "sheets", "+read", "--spreadsheet", spreadsheet_id, "--range", sheet_name],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    data = json.loads(result.stdout)
-    values = data.get("values", [])
-    if not values:
-        return [], []
-    headers = values[0]
-    rows = values[1:]
-    rows = [r + [""] * (len(headers) - len(r)) for r in rows]
-    return headers, rows
-
-
-def _cell(row: list[str], idx: int) -> str:
-    return row[idx].strip() if idx < len(row) else ""
 
 
 def _active_participants(nomes: list[str]) -> int:
@@ -100,7 +91,11 @@ def _find_col(headers: list[str], name: str) -> int:
         raise ValueError(f"Coluna obrigatória não encontrada na planilha: '{name}'") from exc
 
 
-def load_teams(headers: list[str], rows: list[list[str]]) -> list[Team]:
+def load_teams(
+    headers: list[str],
+    rows: list[list[str]],
+    coord_map: dict[str, tuple[str, str, str]],
+) -> list[Team]:
     i_mulheres = _find_col(headers, WOMEN_HEADER)
     i_medio = _find_col(headers, HIGH_SCHOOL_HEADER)
     i_score = _find_col(headers, SCORE_HEADER)
@@ -109,12 +104,12 @@ def load_teams(headers: list[str], rows: list[list[str]]) -> list[Team]:
     skipped_no_rank = 0
 
     for row in rows:
-        nome = _cell(row, _TEAM_NAME_COL)
-        campus = _cell(row, _CAMPUS_COL)
+        nome = get(row, TEAM_NAME_COL)
+        campus = get(row, CAMPUS_COL)
         if not nome or not campus:
             continue
 
-        raw_rank = _cell(row, i_score)
+        raw_rank = get(row, i_score)
         if not raw_rank:
             skipped_no_rank += 1
             continue
@@ -124,17 +119,18 @@ def load_teams(headers: list[str], rows: list[list[str]]) -> list[Team]:
             skipped_no_rank += 1
             continue
 
-        part_nomes = [_cell(row, i) for i in _PART_NOME_COLS]
+        part_nomes = [get(row, i) for i in _PART_NOME_COLS]
 
         teams.append(
             Team(
                 nome=nome,
                 campus=campus,
                 rank=rank,
-                mulheres=_parse_women_count(_cell(row, i_mulheres)),
-                apenas_medio=_parse_yes(_cell(row, i_medio)),
+                mulheres=_parse_women_count(get(row, i_mulheres)),
+                apenas_medio=_parse_yes(get(row, i_medio)),
                 participantes=_active_participants(part_nomes),
                 part_nomes=part_nomes,
+                source_row=build_team_row(row, headers, coord_map),
             )
         )
 
@@ -292,8 +288,13 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--teams", required=True, metavar="SHEET_ID",
                         help="ID da planilha de equipes")
+    parser.add_argument("--campi", required=True, metavar="SHEET_ID",
+                        help="ID da planilha de inscrição de campi (para os coordenadores)")
     parser.add_argument("--output", "-o", metavar="ARQUIVO", default=str(OUTPUT_FILE),
                         help=f"Arquivo CSV de saída (padrão: {OUTPUT_FILE.name})")
+    parser.add_argument("--final", "-f", metavar="ARQUIVO", default=str(FINAL_OUTPUT_FILE),
+                        help="CSV com as equipes classificadas no formato de "
+                             f"equipes_interif.csv (padrão: {FINAL_OUTPUT_FILE.name})")
     parser.add_argument("--geral", type=int, default=11, metavar="N",
                         help="Vagas pelo inciso II — classificação geral (padrão: 11)")
     parser.add_argument("--medio", type=int, default=3, metavar="N",
@@ -306,25 +307,67 @@ def parse_args() -> argparse.Namespace:
 # ── Saída ─────────────────────────────────────────────────────────────────────
 
 
-def escrever_resultado(classificados: list[tuple[str, Team]], output_path: Path) -> None:
-    """Grava o CSV de classificados, gera o gráfico e imprime o resumo."""
+def escrever_final(
+    classificados: list[tuple[str, Team]],
+    source_headers: list[str],
+    final_path: Path,
+) -> None:
+    """Grava o recorte de classificados com a mesma estrutura de equipes_interif.csv.
+
+    Ordenado pela classificação na prova da Fase Local (rank ascendente).
+    """
+    rows = sorted((team for _, team in classificados), key=lambda t: t.rank)
+    with open(final_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f, lineterminator="\n")
+        writer.writerow(source_headers)
+        for team in rows:
+            writer.writerow(team.source_row)
+    print(f"{len(rows)} equipes classificadas (estrutura equipes_interif) salvas em {final_path}")
+
+
+def escrever_resultado(
+    classificados: list[tuple[str, Team]],
+    output_path: Path,
+    *,
+    source_headers: list[str] | None = None,
+    final_path: Path | None = None,
+) -> None:
+    """Grava o CSV de classificados, gera o gráfico e imprime o resumo.
+
+    Quando ``source_headers`` e ``final_path`` são fornecidos, grava também o
+    recorte das equipes classificadas no formato de equipes_interif.csv.
+    """
+    header = [
+        "Critério", "Nome da Equipe", "Campus",
+        "Nome Participante 1", "Nome Participante 2", "Nome Participante 3",
+        "Classificação",
+    ]
+    rows = [
+        [
+            criterio,
+            team.nome,
+            team.campus,
+            team.part_nomes[0],
+            team.part_nomes[1],
+            team.part_nomes[2],
+            team.rank,
+        ]
+        for criterio, team in classificados
+    ]
+
     with open(output_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f, lineterminator="\n")
-        writer.writerow([
-            "Critério", "Nome da Equipe", "Campus",
-            "Nome Participante 1", "Nome Participante 2", "Nome Participante 3",
-            "Classificação",
-        ])
-        for criterio, team in classificados:
-            writer.writerow([
-                criterio,
-                team.nome,
-                team.campus,
-                team.part_nomes[0],
-                team.part_nomes[1],
-                team.part_nomes[2],
-                team.rank,
-            ])
+        writer.writerow(header)
+        writer.writerows(rows)
+
+    xlsx_path = output_path.with_suffix(".xlsx")
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(header)
+    for row in rows:
+        ws.append(row)
+    wb.save(xlsx_path)
+    print(f"{len(rows)} equipes classificadas salvas em {xlsx_path}")
 
     chart_path = output_path.parent / CHART_FILE.name
     generate_chart(classificados, chart_path)
@@ -337,6 +380,9 @@ def escrever_resultado(classificados: list[tuple[str, Team]], output_path: Path)
     for criterio, n in counts.items():
         print(f"  {criterio}: {n} equipe(s)")
 
+    if source_headers is not None and final_path is not None:
+        escrever_final(classificados, source_headers, final_path)
+
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
@@ -344,11 +390,16 @@ def escrever_resultado(classificados: list[tuple[str, Team]], output_path: Path)
 def main() -> None:
     args = parse_args()
 
+    print("Lendo planilha de campi (coordenadores)...")
+    _, campi_rows = read_sheet(args.campi, SHEET_NAME)
+    coord_map = build_coord_map(campi_rows)
+    print(f"  {len(coord_map)} campus com coordenador")
+
     print("Lendo planilha de equipes...")
     headers, rows = read_sheet(args.teams, SHEET_NAME)
     print(f"  {len(rows)} linhas lidas")
 
-    teams = load_teams(headers, rows)
+    teams = load_teams(headers, rows, coord_map)
     print(f"  {len(teams)} equipes com classificação válida")
 
     classificados = selecionar(
@@ -358,7 +409,12 @@ def main() -> None:
         n_mulheres=args.mulheres,
     )
 
-    escrever_resultado(classificados, Path(args.output))
+    escrever_resultado(
+        classificados,
+        Path(args.output),
+        source_headers=build_output_headers(headers),
+        final_path=Path(args.final),
+    )
 
 
 if __name__ == "__main__":

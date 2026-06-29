@@ -22,6 +22,7 @@ from pathlib import Path
 import pdfplumber
 
 from classificacao_interif import (
+    FINAL_OUTPUT_FILE,
     OUTPUT_FILE,
     Team,
     _active_participants,
@@ -99,35 +100,58 @@ def parse_scoreboard(pdf_path: Path) -> list[tuple[int, str, str]]:
 # ── Leitura do CSV de equipes ─────────────────────────────────────────────────
 
 
-def load_equipes(csv_path: Path) -> tuple[dict[tuple[str, str], dict], dict[str, list[dict]]]:
+def load_equipes(
+    csv_path: Path,
+) -> tuple[dict[tuple[str, str], dict], dict[str, list[dict]], list[str]]:
     """
-    Lê equipes_interif.csv e devolve dois índices para casamento:
+    Lê equipes_interif.csv e devolve dois índices para casamento, mais o
+    cabeçalho original:
       - by_campus_name: {(campus_key, nome_key): dados}
       - by_name: {nome_key: [dados, ...]} (para fallback quando o campus diverge)
+      - headers: cabeçalho do CSV, para reescrever o recorte de classificados.
     Cada `dados` traz campus original, nomes dos participantes, contagem de
-    mulheres e marcação de ensino médio.
+    mulheres, marcação de ensino médio e a linha completa (source_row).
+
+    Lê por posição (csv.reader) em vez de csv.DictReader porque o CSV tem
+    cabeçalhos repetidos (ex.: 'Prontuário', 'Tamanho da camiseta') que o
+    DictReader colapsaria — perdendo colunas ao reescrever a linha completa.
     """
     by_campus_name: dict[tuple[str, str], dict] = {}
     by_name: dict[str, list[dict]] = {}
     with open(csv_path, newline="", encoding="utf-8-sig") as f:
-        for row in csv.DictReader(f):
-            nome = (row.get(TEAM_NAME_HEADER) or "").strip()
-            campus = (row.get(CAMPUS_HEADER) or "").strip()
+        reader = csv.reader(f)
+        headers = next(reader)
+        ncols = len(headers)
+
+        def col(name: str) -> int:
+            return headers.index(name)
+
+        i_nome = col(TEAM_NAME_HEADER)
+        i_campus = col(CAMPUS_HEADER)
+        i_women = col(WOMEN_HEADER)
+        i_medio = col(HIGH_SCHOOL_HEADER)
+        i_parts = [col(h) for h in PARTICIPANT_HEADERS]
+
+        for raw in reader:
+            row = raw + [""] * (ncols - len(raw))
+            nome = row[i_nome].strip()
+            campus = row[i_campus].strip()
             if not nome or not campus:
                 continue
-            part_nomes = [(row.get(h) or "").strip() for h in PARTICIPANT_HEADERS]
+            part_nomes = [row[i].strip() for i in i_parts]
             dados = {
                 "campus": campus,
                 "nome": nome,
                 "part_nomes": part_nomes,
-                "mulheres": _parse_women_count(row.get(WOMEN_HEADER, "")),
-                "apenas_medio": _parse_yes(row.get(HIGH_SCHOOL_HEADER, "")),
+                "mulheres": _parse_women_count(row[i_women]),
+                "apenas_medio": _parse_yes(row[i_medio]),
                 "participantes": _active_participants(part_nomes),
+                "source_row": row,
             }
             nome_key = _key(nome)
             by_campus_name[(_key(campus), nome_key)] = dados
             by_name.setdefault(nome_key, []).append(dados)
-    return by_campus_name, by_name
+    return by_campus_name, by_name, headers
 
 
 # ── Junção placar + CSV ───────────────────────────────────────────────────────
@@ -173,6 +197,7 @@ def montar_equipes(
                 apenas_medio=dados["apenas_medio"],
                 participantes=dados["participantes"],
                 part_nomes=dados["part_nomes"],
+                source_row=dados["source_row"],
             )
         )
 
@@ -209,6 +234,9 @@ def parse_args() -> argparse.Namespace:
                         help="equipes_interif.csv (fonte dos participantes)")
     parser.add_argument("--output", "-o", metavar="ARQUIVO", default=str(OUTPUT_FILE),
                         help=f"Arquivo CSV de saída (padrão: {OUTPUT_FILE.name})")
+    parser.add_argument("--final", "-f", metavar="ARQUIVO", default=str(FINAL_OUTPUT_FILE),
+                        help="CSV com as equipes classificadas no formato de "
+                             f"equipes_interif.csv (padrão: {FINAL_OUTPUT_FILE.name})")
     parser.add_argument("--geral", type=int, default=11, metavar="N",
                         help="Vagas pelo inciso II — classificação geral (padrão: 11)")
     parser.add_argument("--medio", type=int, default=3, metavar="N",
@@ -236,7 +264,7 @@ def main() -> None:
     print(f"  {len(scoreboard)} equipes no placar")
 
     print(f"Lendo {csv_path.name}...")
-    by_campus_name, by_name = load_equipes(csv_path)
+    by_campus_name, by_name, source_headers = load_equipes(csv_path)
     print(f"  {len(by_campus_name)} equipes no CSV")
 
     sigla_para_campus = {sigla: campus for campus, sigla in load_campi(CAMPI_FILE).items()}
@@ -251,7 +279,12 @@ def main() -> None:
         n_mulheres=args.mulheres,
     )
 
-    escrever_resultado(classificados, Path(args.output))
+    escrever_resultado(
+        classificados,
+        Path(args.output),
+        source_headers=source_headers,
+        final_path=Path(args.final),
+    )
 
 
 if __name__ == "__main__":
