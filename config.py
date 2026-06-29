@@ -6,9 +6,9 @@ Importado por todos os scripts InterIF; sem dependências externas.
 
 # ── Identidade do evento ──────────────────────────────────────────────────────
 
-TITULO_EVENTO = "IX InterIF — Fase Local"
+TITULO_EVENTO = "IX InterIF — Fase Final"
 EMAIL_INTERIF = "interif@ifsp.edu.br"
-DATA_EVENTO = "2026-06-20"
+DATA_EVENTO = "2026-09-25"
 URL_BOCA = "https://boca.ifsp.edu.br/"
 
 # ── BOCA ──────────────────────────────────────────────────────────────────────

@@ -9,6 +9,8 @@ __pycache__/
 cursos_mapa.csv
 
 # Saídas geradas pelos scripts
+Fase1/
+Fase2/
 output/
 etiquetas/
 placas/
