@@ -39,6 +39,7 @@ interif-cpf          = "cpf_check:main"               # python cpf_check.py
 interif-boca         = "gerar_arquivos_boca:main"     # python gerar_arquivos_boca.py
 interif-credenciais  = "enviar_credenciais:main"      # python enviar_credenciais.py
 interif-camisetas    = "total_camisetas:main"          # python total_camisetas.py
+interif-confirmar-camisetas = "confirmar_camisetas:main" # python confirmar_camisetas.py
 interif-etiquetas    = "gerar_etiquetas:main"             # python gerar_etiquetas.py
 interif-placas       = "gerar_placas:main"                # python gerar_placas.py
 interif-graficos      = "graficos_equipes:main"        # python graficos_equipes.py
@@ -59,6 +60,7 @@ packages = [
     "gerar_arquivos_boca.py",
     "enviar_credenciais.py",
     "total_camisetas.py",
+    "confirmar_camisetas.py",
     "gerar_etiquetas.py",
     "gerar_placas.py",
     "graficos_equipes.py",
