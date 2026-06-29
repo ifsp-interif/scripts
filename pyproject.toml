@@ -19,8 +19,6 @@ dependencies = [
     "pillow>=10.0",
     # graficos_equipes.py
     "tabulate>=0.9",
-    # normalização de nomes de cursos
-    "rapidfuzz>=3.0",
     # gráficos de distribuição
     "matplotlib>=3.8",
     # templates de mala direta
