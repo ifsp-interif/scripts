@@ -11,7 +11,7 @@ Destinatários:
 
 Uso:
     uv run python enviar_credenciais.py [--usuarios USUARIOS_TXT]
-                                        [--csv CSV] [--campi CAMPI]
+                                        [-1 | -2] [--csv CSV] [--campi CAMPI]
                                         [--campus SIGLA]
                                         [--so-coordenadores] [--so-responsaveis]
                                         [--so-participantes]
@@ -29,8 +29,16 @@ from pathlib import Path
 
 from tabulate import tabulate
 
-from config import CRED_BODY_TEMPLATE, CRED_SUBJECT_PREFIX as EMAIL_SUBJECT_PREFIX
-from config import EMAIL_INTERIF, STAFF_BODY_TEMPLATE, STAFF_SUBJECT, TITULO_EVENTO
+from config import (
+    CRED_BODY_TEMPLATE,
+    EMAIL_INTERIF,
+    STAFF_BODY_TEMPLATE,
+    STAFF_SUBJECT,
+    TITULO_EVENTO,
+)
+from config import (
+    CRED_SUBJECT_PREFIX as EMAIL_SUBJECT_PREFIX,
+)
 from email_utils import send_email
 from interif_core import (
     CAMPI_FILE,
@@ -337,6 +345,22 @@ def parse_args() -> argparse.Namespace:
         metavar="ARQUIVO",
         help=f"Caminho para usuarios.txt (padrão: {USUARIOS_FILE})",
     )
+    fase_group = parser.add_mutually_exclusive_group()
+    fase_group.add_argument(
+        "-1",
+        dest="fase",
+        action="store_const",
+        const=1,
+        default=1,
+        help="Fluxo de envio da 1ª fase (padrão)",
+    )
+    fase_group.add_argument(
+        "-2",
+        dest="fase",
+        action="store_const",
+        const=2,
+        help="Fluxo de envio da 2ª fase; não envia staff, judge nem score",
+    )
     parser.add_argument(
         "--csv",
         default=str(CSV_FILE),
@@ -395,8 +419,43 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def validar_opcoes(args: argparse.Namespace) -> None:
+    if args.enviar_staff and (args.so_coordenadores or args.so_responsaveis or args.so_participantes):
+        raise ValueError("--enviar-staff não pode ser combinado com --so-*.")
+
+    if args.fase == 2 and args.enviar_staff:
+        raise ValueError(
+            "na fase 2, credenciais de staff, judge e score ficam em usuarios.txt, "
+            "mas não devem ser enviadas."
+        )
+
+    if args.fase == 2 and args.so_coordenadores:
+        raise ValueError("na fase 2, as credenciais não devem ser enviadas aos coordenadores locais.")
+
+
+def grupos_envio(args: argparse.Namespace) -> tuple[bool, bool, bool, bool]:
+    """Retorna (coordenadores, responsáveis, participantes, resumo)."""
+    seletivo = args.so_coordenadores or args.so_responsaveis or args.so_participantes
+
+    if args.fase == 2:
+        if seletivo:
+            return False, args.so_responsaveis, args.so_participantes, False
+        return False, True, True, False
+
+    if seletivo:
+        return args.so_coordenadores, args.so_responsaveis, args.so_participantes, False
+
+    return True, True, True, True
+
+
 def main() -> None:
     args = parse_args()
+    try:
+        validar_opcoes(args)
+    except ValueError as exc:
+        print(f"Erro: {exc}", file=sys.stderr)
+        sys.exit(1)
+
     usuarios_path = Path(args.usuarios)
     csv_path = Path(args.csv)
     campi_path = Path(args.campi)
@@ -411,6 +470,7 @@ def main() -> None:
     print(f"Usuários: {usuarios_path.resolve()}")
     print(f"CSV:      {csv_path.resolve()}")
     print(f"Campi:    {campi_path.resolve()}")
+    print(f"Fase:     {args.fase}")
     print(f"Modo:     {'dry-run' if args.dry_run else 'envio real'}")
     print()
 
@@ -443,10 +503,6 @@ def main() -> None:
         ja_enviados = _enderecos_ja_enviados(log_path)
         print(f"{len(ja_enviados)} destinatário(s) já enviados serão pulados (de {log_path}).")
 
-    if args.enviar_staff and (args.so_coordenadores or args.so_responsaveis or args.so_participantes):
-        print("Erro: --enviar-staff não pode ser combinado com --so-*.", file=sys.stderr)
-        sys.exit(1)
-
     if args.enviar_staff:
         staff_por_sigla, score_users = parse_staff_e_score(usuarios_path)
         n_staff = enviar_emails_staff(credenciais, staff_por_sigla, score_users, args.dry_run)
@@ -454,25 +510,19 @@ def main() -> None:
         render_summary(credenciais, n_staff, dry_run=args.dry_run)
         return
 
-    # Envio seletivo: se qualquer --so-* for passado, envia só os grupos escolhidos
-    # (e pula o resumo). As flags são combináveis. Sem nenhuma, envia para todos.
-    seletivo = args.so_coordenadores or args.so_responsaveis or args.so_participantes
-
     n_coord = n_tec = n_part = 0
-    if seletivo:
-        if args.so_coordenadores:
-            n_coord = enviar_emails_coordenadores(credenciais, args.dry_run)
-        if args.so_responsaveis:
-            n_tec = enviar_emails_tecnicos(credenciais, args.dry_run)
-        if args.so_participantes:
-            n_part = enviar_emails_participantes(credenciais, args.dry_run, ja_enviados)
-        total_emails = n_coord + n_tec + n_part
-    else:
+    enviar_coord, enviar_resp, enviar_part, enviar_email_resumo = grupos_envio(args)
+
+    if enviar_coord:
         n_coord = enviar_emails_coordenadores(credenciais, args.dry_run)
+    if enviar_resp:
         n_tec = enviar_emails_tecnicos(credenciais, args.dry_run)
+    if enviar_part:
         n_part = enviar_emails_participantes(credenciais, args.dry_run, ja_enviados)
+    if enviar_email_resumo:
         enviar_resumo(credenciais, n_coord, n_tec, n_part, args.dry_run)
-        total_emails = n_coord + n_tec + n_part + 1
+
+    total_emails = n_coord + n_tec + n_part + (1 if enviar_email_resumo else 0)
 
     print()
     render_summary(credenciais, total_emails, dry_run=args.dry_run)

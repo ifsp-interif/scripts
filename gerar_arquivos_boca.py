@@ -7,13 +7,14 @@ Lê equipes_interif.csv e gera os quatro arquivos de configuração do BOCA:
   • secret_interif.toml — segredos por sede
 
 Uso:
-    uv run python gerar_arquivos_boca.py [CSV] [-u USUARIOS] [-a TOML]
+    uv run python gerar_arquivos_boca.py [CSV] [-1 | -2] [-u USUARIOS] [-a TOML]
                                          [-s SCORE] [--secrets SECRET]
                                          [-o DIR] [--campi CAMPI]
                                          [--sigla] [--dry-run]
 """
 
 import argparse
+import secrets
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -25,10 +26,15 @@ from interif_core import (
     CAMPI_FILE,
     CSV_FILE,
     JUDGE_USERNUMBER,
+    PASSWORD_ALPHABET,
+    PASSWORD_LENGTH,
     SCORE_USERNUMBER,
     STAFF_USERNUMBER_START,
+    TEAM_USERNUMBER_START,
     USERSITENUMBER,
     CredencialEquipe,
+    _emails_cred_para,
+    _participantes_de,
     _usernumber_blocos,
     gerar_credenciais,
     load_campi,
@@ -104,7 +110,99 @@ def build_usuarios(
     return "".join(linhas)
 
 
-def build_toml(info_campus: list[dict]) -> str:
+def gerar_credenciais_fase2(
+    teams: list[dict],
+    campi: dict[str, str],
+    *,
+    usar_sigla: bool = False,
+) -> tuple[list[CredencialEquipe], list[dict]]:
+    """Gera credenciais globais para a segunda fase, preservando a ordem do CSV."""
+    credenciais: list[CredencialEquipe] = []
+    info_por_campus: dict[str, dict] = {}
+
+    for idx, team in enumerate(teams, start=1):
+        campus = team["campus"]
+        sigla = campi[campus]
+        label = sigla if usar_sigla else campus
+        usernumber = TEAM_USERNUMBER_START + idx - 1
+
+        credenciais.append(
+            CredencialEquipe(
+                campus=campus,
+                sigla=sigla,
+                label=label,
+                nome_equipe=team["nome_equipe"],
+                username=f"team{idx:02d}",
+                password="".join(secrets.choice(PASSWORD_ALPHABET) for _ in range(PASSWORD_LENGTH)),
+                coord_nome=team["coord_nome"],
+                coord_email=team["coord_email"],
+                resp_nome=team["resp_nome"],
+                resp_email=team["resp_email"],
+                participantes=_participantes_de(team),
+                emails_cred=_emails_cred_para(team),
+            )
+        )
+
+        if campus not in info_por_campus:
+            info_por_campus[campus] = {
+                "campus": campus,
+                "sigla": sigla,
+                "prefixo": sigla.lower(),
+                "n_equipes": 0,
+                "bloco_inicio": usernumber,
+                "bloco_fim": usernumber,
+            }
+        info_por_campus[campus]["n_equipes"] += 1
+        info_por_campus[campus]["bloco_fim"] = usernumber
+
+    return credenciais, list(info_por_campus.values())
+
+
+def build_usuarios_fase2(credenciais: list[CredencialEquipe], ano: int) -> str:
+    """Constrói usuarios.txt para a segunda fase: times globais e staff único."""
+    linhas: list[str] = ["[user]\n"]
+
+    for n, cred in enumerate(credenciais, start=0):
+        linhas.append(f"usernumber = {TEAM_USERNUMBER_START + n}\n")
+        linhas.append(f"usersitenumber = {USERSITENUMBER}\n")
+        linhas.append(f"username = {cred.username}\n")
+        linhas.append(f"userpassword = {cred.password}\n")
+        linhas.append("usertype = team\n")
+        linhas.append(f"userfullname = [IFSP - {cred.label}] {cred.nome_equipe}\n")
+        linhas.append("userenabled = t\n")
+        linhas.append("usermultilogin = f\n\n")
+
+    linhas.append(f"usernumber = {STAFF_USERNUMBER_START}\n")
+    linhas.append(f"usersitenumber = {USERSITENUMBER}\n")
+    linhas.append("username = staffif\n")
+    linhas.append(f"userpassword = staffif@{ano}\n")
+    linhas.append("usertype = staff\n")
+    linhas.append(f"userfullname = [IFSP] Staff - Maratona InterIF {ano}\n")
+    linhas.append("userenabled = t\n")
+    linhas.append("usermultilogin = t\n\n")
+
+    linhas.append(f"usernumber = {JUDGE_USERNUMBER}\n")
+    linhas.append(f"usersitenumber = {USERSITENUMBER}\n")
+    linhas.append("username = judgeif\n")
+    linhas.append(f"userpassword = judgeif@{ano}\n")
+    linhas.append("usertype = judge\n")
+    linhas.append(f"userfullname = [IFSP] Juízes - Maratona InterIF {ano}\n")
+    linhas.append("userenabled = t\n")
+    linhas.append("usermultilogin = t\n\n")
+
+    linhas.append(f"usernumber = {SCORE_USERNUMBER}\n")
+    linhas.append(f"usersitenumber = {USERSITENUMBER}\n")
+    linhas.append("username = scoreif\n")
+    linhas.append(f"userpassword = scoreif@{ano}\n")
+    linhas.append("usertype = score\n")
+    linhas.append(f"userfullname = [IFSP] Placar - Maratona InterIF {ano}\n")
+    linhas.append("userenabled = t\n")
+    linhas.append("usermultilogin = t\n\n")
+
+    return "".join(linhas)
+
+
+def build_toml(info_campus: list[dict], *, separar_campi: bool = True) -> str:
     """Constrói o conteúdo de INTERIF.toml."""
     linhas: list[str] = []
 
@@ -124,36 +222,38 @@ def build_toml(info_campus: list[dict]) -> str:
     linhas.append("prata = 2\n")
     linhas.append("bronze = 3\n\n")
 
-    for info in info_campus:
-        linhas.append("[[sedes]]\n")
-        linhas.append(f'name = "{info["sigla"]}"\n')
-        linhas.append(f'codes = ["team{info["prefixo"]}"]\n')
-        linhas.append("premiacao = false\n")
-        linhas.append("vagas = 0\n\n")
+    if separar_campi:
+        for info in info_campus:
+            linhas.append("[[sedes]]\n")
+            linhas.append(f'name = "{info["sigla"]}"\n')
+            linhas.append(f'codes = ["team{info["prefixo"]}"]\n')
+            linhas.append("premiacao = false\n")
+            linhas.append("vagas = 0\n\n")
 
     return "".join(linhas)
 
 
-def build_score(info_campus: list[dict]) -> str:
+def build_score(info_campus: list[dict], *, separar_campi: bool = True) -> str:
     """Constrói o conteúdo de score.sep."""
     blocos = _usernumber_blocos()
     geral_inicio = blocos[0]
-    geral_fim = info_campus[-1]["bloco_fim"] if info_campus else geral_inicio
+    geral_fim = max((info["bloco_fim"] for info in info_campus), default=geral_inicio)
 
     linhas: list[str] = []
     linhas.append(f"GERAL {geral_inicio}/{geral_fim}/1 # /^team/ /^score/ /^judge/ /^admin/\n")
 
-    for info in info_campus:
-        prefixo = info["prefixo"]
-        linhas.append(
-            f"{info['sigla']} {info['bloco_inicio']}/{info['bloco_fim']}/1 "
-            f"# /^team{prefixo}/ /^score/ /^staff{prefixo}/\n"
-        )
+    if separar_campi:
+        for info in info_campus:
+            prefixo = info["prefixo"]
+            linhas.append(
+                f"{info['sigla']} {info['bloco_inicio']}/{info['bloco_fim']}/1 "
+                f"# /^team{prefixo}/ /^score/ /^staff{prefixo}/\n"
+            )
 
     return "".join(linhas)
 
 
-def build_secrets(info_campus: list[dict]) -> str:
+def build_secrets(info_campus: list[dict], *, separar_campi: bool = True) -> str:
     """Constrói o conteúdo de secret_interif.toml."""
     linhas: list[str] = []
     linhas.append(f'salt = "{SALT}"\n\n')
@@ -162,10 +262,11 @@ def build_secrets(info_campus: list[dict]) -> str:
     linhas.append('name = "Geral"\n')
     linhas.append(f'secret = "{SECRET_GERAL}"\n\n')
 
-    for info in info_campus:
-        linhas.append("[[secrets]]\n")
-        linhas.append(f'name = "{info["sigla"]}"\n')
-        linhas.append(f'secret = "{info["prefixo"]}_abc"\n\n')
+    if separar_campi:
+        for info in info_campus:
+            linhas.append("[[secrets]]\n")
+            linhas.append(f'name = "{info["sigla"]}"\n')
+            linhas.append(f'secret = "{info["prefixo"]}_abc"\n\n')
 
     return "".join(linhas)
 
@@ -173,19 +274,27 @@ def build_secrets(info_campus: list[dict]) -> str:
 # ── Exibição ──────────────────────────────────────────────────────────────────
 
 
-def render_table(info_campus: list[dict]) -> None:
-    rows = [
-        [
-            info["campus"],
-            info["sigla"],
-            info["n_equipes"],
-            f"{info['bloco_inicio']}–{info['bloco_fim']}",
+def render_table(info_campus: list[dict], *, fase: int) -> None:
+    if fase == 2:
+        rows = [[info["campus"], info["sigla"], info["n_equipes"]] for info in info_campus]
+        headers = ["Campus", "Sigla", "Nº Equipes"]
+    else:
+        rows = [
+            [
+                info["campus"],
+                info["sigla"],
+                info["n_equipes"],
+                f"{info['bloco_inicio']}–{info['bloco_fim']}",
+            ]
+            for info in info_campus
         ]
-        for info in info_campus
-    ]
+        headers = ["Campus", "Sigla", "Nº Equipes", "Bloco usernumber"]
+
     print(
         tabulate(
-            rows, headers=["Campus", "Sigla", "Nº Equipes", "Bloco usernumber"], tablefmt="simple"
+            rows,
+            headers=headers,
+            tablefmt="simple",
         )
     )
 
@@ -194,11 +303,13 @@ def render_summary(
     info_campus: list[dict],
     destinos: dict[str, str],
     dry_run: bool,
+    fase: int,
 ) -> None:
     n_equipes = sum(i["n_equipes"] for i in info_campus)
     n_campus = len(info_campus)
 
     rows: list[list[str | int]] = [
+        ["Fase", fase],
         ["Equipes", n_equipes],
         ["Campus", n_campus],
     ]
@@ -230,6 +341,22 @@ def parse_args() -> argparse.Namespace:
         default=str(CSV_FILE),
         metavar="CSV",
         help=f"Caminho do CSV de equipes (padrão: {CSV_FILE.name})",
+    )
+    fase_group = parser.add_mutually_exclusive_group()
+    fase_group.add_argument(
+        "-1",
+        dest="fase",
+        action="store_const",
+        const=1,
+        default=1,
+        help="Gera arquivos para a 1ª fase, separados por campus (padrão)",
+    )
+    fase_group.add_argument(
+        "-2",
+        dest="fase",
+        action="store_const",
+        const=2,
+        help="Gera arquivos para a 2ª fase, com sede única e times sequenciais",
     )
     parser.add_argument(
         "-u",
@@ -304,6 +431,7 @@ def main() -> None:
     print(f"CSV:    {csv_path.resolve()}")
     print(f"Campi:  {campi_path.resolve()}")
     print(f"Saída:  {output_dir.resolve()}")
+    print(f"Fase:   {args.fase}")
     print()
 
     campi = load_campi(campi_path)
@@ -319,14 +447,20 @@ def main() -> None:
         print("\nCorrija os problemas acima e tente novamente.", file=sys.stderr)
         sys.exit(1)
 
-    credenciais, info_campus = gerar_credenciais(teams, campi, usar_sigla=args.sigla)
+    if args.fase == 2:
+        credenciais, info_campus = gerar_credenciais_fase2(teams, campi, usar_sigla=args.sigla)
+        usuarios_txt = build_usuarios_fase2(credenciais, ano)
+        toml_txt = build_toml(info_campus, separar_campi=False)
+        score_txt = build_score(info_campus, separar_campi=False)
+        secrets_txt = build_secrets(info_campus, separar_campi=False)
+    else:
+        credenciais, info_campus = gerar_credenciais(teams, campi, usar_sigla=args.sigla)
+        usuarios_txt = build_usuarios(credenciais, info_campus, ano)
+        toml_txt = build_toml(info_campus)
+        score_txt = build_score(info_campus)
+        secrets_txt = build_secrets(info_campus)
 
-    usuarios_txt = build_usuarios(credenciais, info_campus, ano)
-    toml_txt = build_toml(info_campus)
-    score_txt = build_score(info_campus)
-    secrets_txt = build_secrets(info_campus)
-
-    render_table(info_campus)
+    render_table(info_campus, fase=args.fase)
     print()
 
     destinos = {
@@ -359,7 +493,7 @@ def main() -> None:
         for caminho, conteudo in saidas:
             caminho.write_text(conteudo, encoding="utf-8", newline="\n")
 
-    render_summary(info_campus, destinos, dry_run=args.dry_run)
+    render_summary(info_campus, destinos, dry_run=args.dry_run, fase=args.fase)
 
     if not args.dry_run:
         print("\nOK: 4 arquivo(s) gerado(s) com sucesso.")

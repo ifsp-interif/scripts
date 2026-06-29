@@ -594,6 +594,8 @@ uv run python gerar_arquivos_boca.py [CSV] [opções]
 | Opção | Atalho | Descrição |
 |-------|--------|-----------|
 | `CSV` | | CSV de equipes (padrão: `equipes_interif.csv`) |
+| `-1` | | Gera arquivos para a 1ª fase, separados por campus (padrão) |
+| `-2` | | Gera arquivos para a 2ª fase, com sede única e times `team01`, `team02`, ... |
 | `--output DIR` | `-o` | Diretório de saída (padrão: `output/`) |
 | `--user-output ARQUIVO` | `-u` | Nome do arquivo de usuários (padrão: `usuarios.txt`) |
 | `--animator ARQUIVO` | `-a` | Nome do arquivo do animator (padrão: `INTERIF.toml`) |
@@ -614,7 +616,12 @@ uv run python gerar_arquivos_boca.py --sigla
 
 # Pré-visualizar sem gravar
 uv run python gerar_arquivos_boca.py --dry-run
+
+# Gerar arquivos da 2ª fase
+uv run python gerar_arquivos_boca.py -2
 ```
+
+Na 2ª fase, `INTERIF.toml`, `score.sep` e `secret_interif.toml` usam apenas a sede `Geral`. O `usuarios.txt` mantém as credenciais operacionais (`staffif`, `judgeif`, `scoreif`), mas o envio de credenciais deve ser feito com `enviar_credenciais.py -2`, que envia apenas aos responsáveis e participantes; não envia staff, judge, score nem mensagens aos coordenadores locais.
 
 ---
 
