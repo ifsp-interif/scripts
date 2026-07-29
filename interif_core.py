@@ -166,15 +166,19 @@ def load_teams(path: Path) -> list[dict]:
             "resp_nome": col("Nome do Responsável pela Equipe"),
             "resp_cpf": col("CPF do Responsável pela Equipe"),
             "resp_email": col("Email do Responsável pela Equipe"),
+            "resp_tamanho_camiseta": col("Email do Responsável pela Equipe") + 1,
             "cred_para": col("Quem mais deve receber as credenciais de acesso?"),
         }
-        # Participantes: nome, prontuário (coluna logo após o nome), CPF e email.
+        # Participantes: nome, prontuário, CPF, email e tamanho da camiseta
+        # (colunas em posições fixas relativas ao nome, já que "Tamanho da
+        # camiseta" se repete uma vez por participante no CSV).
         idx_part = {
             i: {
                 "nome": col(f"Nome Participante {i}"),
                 "prontuario": col(f"Nome Participante {i}") + 1,
                 "cpf": col(f"CPF Participante {i}"),
                 "email": col(f"Email Participante {i}"),
+                "tamanho_camiseta": col(f"Nome Participante {i}") + 6,
             }
             for i in (1, 2, 3)
         }
@@ -195,6 +199,7 @@ def load_teams(path: Path) -> list[dict]:
                 "resp_nome": get(row, idx["resp_nome"]),
                 "resp_cpf": get(row, idx["resp_cpf"]),
                 "resp_email": get(row, idx["resp_email"]).lower(),
+                "resp_tamanho_camiseta": get(row, idx["resp_tamanho_camiseta"]),
                 "cred_para": get(row, idx["cred_para"]),
             }
             for i, cols in idx_part.items():
@@ -202,6 +207,7 @@ def load_teams(path: Path) -> list[dict]:
                 team[f"part_{i}_prontuario"] = get(row, cols["prontuario"])
                 team[f"part_{i}_cpf"] = get(row, cols["cpf"])
                 team[f"part_{i}_email"] = get(row, cols["email"]).lower()
+                team[f"part_{i}_tamanho_camiseta"] = get(row, cols["tamanho_camiseta"])
             teams.append(team)
     return teams
 

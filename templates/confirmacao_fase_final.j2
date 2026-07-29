@@ -1,0 +1,61 @@
+************************************************************************************
+                         Esta é uma mensagem automática
+************************************************************************************
+
+Prezado {{ nome }},
+
+Em primeiro lugar, parabéns pela classificação das equipes de {{ campus }}
+para o {{ evento }}!  Estamos ansiosos para receber vocês aqui em São
+José do Rio Preto nos dias 25 e 26/09/2026.
+
+Para que possamos fazer um evento com a qualidade que todos nós merecemos, 
+precisamos confirmar algumas coisas sobre as equipes e os servidores que as 
+acompanharão nesses dois dias.
+
+Dessa forma, precisamos que você, coordenador(a) local, confirme as seguintes 
+informações com as equipes e os coaches até o dia *07/08/2026* impreterivelmente.
+
+- Quantos/quais servidores acompanharão os times
+- Quais times participarão
+- Meio de transporte
+- Fotos dos times
+- Tamanhos de camisetas
+
+## Sobre os servidores
+
+- Dentre os servidores abaixo, indique QUAIS irão acompanhar as equipes:
+
+* {{ coord_nome }}
+{% for coach in coaches -%}
+{% if coach.nome != coord_nome %}* {{ coach.nome }}{% endif %}
+{% endfor %}
+## Sobre as equipes
+
+- As equipes virão para São José do Rio Preto usando carro oficial ou van?
+
+- Alguma das equipes abaixo não vai participar da final, ou algum dos 
+participantes não vai participar?
+
+{% for e in equipes %}▸ {{ e.nome }}
+  {% for p in e.participantes | sort(attribute='nome') %}• {{ p.nome }}
+  {% endfor %}
+{% endfor -%}
+
+- Para cada equipe que for participar, envie uma foto com os participantes, para 
+que seja apresentada durante a revelação do placar. Se não houver foto, iremos 
+apresentar uma imagem genérica da equipe.
+
+## Sobre as camisetas
+
+Precisamos confirmar o tamanho das camisetas de todo mundo, para que possamos 
+fazer o pedido.  Os tamanhos coletados durante as inscrições estão abaixo. 
+Pedimos que, por favor, confirme com cada participante se o tamanho está 
+correto. Após 07/08/2026 não será possível alterar o tamanho.
+
+{% set todos = (participantes + coaches) | sort(attribute='nome') -%}
+{% for t in todos -%}
+* {{ t.nome }}: {{ t.tamanho_camiseta }}
+{% endfor %}
+
+Um grande abraço, e até breve.
+Comissão organizadora {{ evento }}

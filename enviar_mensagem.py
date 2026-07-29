@@ -15,8 +15,11 @@ Variáveis disponíveis no template:
     coord_nome         Nome completo do coordenador (--coordenadores); "" nos demais modos
     coach              Nome do coach (--coaches e --participantes); "" em --coordenadores
     equipe             Nome da equipe (--participantes); "" nos demais modos
-    equipes            Lista de equipes (dicts com nome/campus/coach/participantes/totais)
-    participantes      Lista de dicts {nome, email} dos participantes do contexto
+    equipes            Lista de equipes (dicts com nome/campus/coach/coach_tamanho_camiseta/
+                       participantes/totais); cada participante é {nome, email, tamanho_camiseta}
+    coaches            Lista de coaches únicos do grupo (--coordenadores); dicts {nome, email,
+                       tamanho_camiseta}
+    participantes      Lista de dicts {nome, email, tamanho_camiseta} dos participantes do contexto
 """
 
 import argparse
@@ -41,7 +44,11 @@ def first_name(full: str) -> str:
 def build_team_ctx(t: dict) -> dict:
     """Converte um dict bruto de equipe no dict de contexto Jinja2."""
     participantes = [
-        {"nome": t[f"part_{i}_nome"], "email": t[f"part_{i}_email"]}
+        {
+            "nome": t[f"part_{i}_nome"],
+            "email": t[f"part_{i}_email"],
+            "tamanho_camiseta": t.get(f"part_{i}_tamanho_camiseta", ""),
+        }
         for i in range(1, 4)
         if t.get(f"part_{i}_nome", "").strip()
     ]
@@ -50,6 +57,7 @@ def build_team_ctx(t: dict) -> dict:
         "campus": t["campus"],
         "coach": t["resp_nome"],
         "coach_email": t["resp_email"],
+        "coach_tamanho_camiseta": t.get("resp_tamanho_camiseta", ""),
         "participantes": participantes,
         "total_participantes": len(participantes),
     }
@@ -64,6 +72,24 @@ def _all_participantes(equipes_ctx: list[dict]) -> list[dict]:
             if key and key not in seen:
                 seen.add(key)
                 result.append(p)
+    return result
+
+
+def _all_coaches(equipes_ctx: list[dict]) -> list[dict]:
+    """Lista de coaches únicos (por email) presentes nas equipes do grupo."""
+    seen: set[str] = set()
+    result: list[dict] = []
+    for eq in equipes_ctx:
+        key = eq["coach_email"] or eq["coach"]
+        if key and key not in seen:
+            seen.add(key)
+            result.append(
+                {
+                    "nome": eq["coach"],
+                    "email": eq["coach_email"],
+                    "tamanho_camiseta": eq["coach_tamanho_camiseta"],
+                }
+            )
     return result
 
 
@@ -160,6 +186,7 @@ def send_coord_group(
             "coach": "",
             "equipe": "",
             "equipes": equipes,
+            "coaches": _all_coaches(equipes),
             "participantes": all_parts,
             "total_equipes": len(equipes),
             "total_participantes": len(all_parts),
