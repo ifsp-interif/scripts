@@ -8,7 +8,7 @@ Importado por todos os scripts InterIF; sem dependências externas.
 
 TITULO_EVENTO = "IX InterIF — Fase Final"
 EMAIL_INTERIF = "interif@ifsp.edu.br"
-DATA_EVENTO = "2026-09-25"
+DATA_EVENTO = "2026-09-25 a 2026-09-26"
 URL_BOCA = "https://boca.ifsp.edu.br/"
 
 # ── BOCA ──────────────────────────────────────────────────────────────────────
@@ -164,7 +164,7 @@ ETIQ_COACH_BODY_TEMPLATE = (
 
 PLACA_TITULO_LINHA1 = "IX MARATONA DE PROGRAMAÇÃO"  # linha maior no cabeçalho
 PLACA_TITULO_LINHA2 = "INTERIF"  # linha menor no cabeçalho
-PLACA_DATA_EVENTO = "Fase Local, 20 de Junho de 2026"
+PLACA_DATA_EVENTO = "Fase Final, 25 e 26 de Setembro de 2026"
 PLACA_FONTE_TITULO = "DK Bocadillo.ttf"  # fonte decorativa do cabeçalho
 PLACA_FONTE_NOME = "AccanthisADFStd-Regular.ttf"  # campus (linha fina)
 PLACA_FONTE_NOME_BOLD = "AccanthisADFStdNo3-Bold.ttf"  # nome da equipe (negrito)
@@ -174,6 +174,19 @@ PLACA_BODY_TEMPLATE = (
     "Seguem em anexo as placas de identificação das equipes do campus {campus} "
     f"para o {TITULO_EVENTO}.\n\n"
     f"Atenciosamente,\nOrganização {TITULO_EVENTO}"
+)
+
+# ── Crachás dos participantes (gerar_crachas.py) ─────────────────────────────
+# Placeholders em CRACHA_BODY_TEMPLATE: {nome}, {campus}  (preenchidos em runtime)
+
+CRACHA_DATA_EVENTO = "25 e 26 de setembro de 2026"
+CRACHA_SUBJECT = f"Crachás dos participantes — {TITULO_EVENTO}"
+CRACHA_BODY_TEMPLATE = (
+    BANNER
+    + "Olá, {nome}!\n\n"
+    + "Segue em anexo os crachás dos participantes das equipes do campus {campus} "
+    + f"para o {TITULO_EVENTO}.\n\n"
+    + f"Atenciosamente,\nOrganização {TITULO_EVENTO}"
 )
 
 # ── Lista de presença (gerar_lista_presenca.py) ──────────────────────────────

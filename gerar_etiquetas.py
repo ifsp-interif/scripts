@@ -10,6 +10,11 @@ e endereços de coordenadores/coaches do CSV de equipes.  Salva:
 
 Com --send envia cada PDF ao coordenador (PDF do campus) e a cada coach (PDF do coach).
 
+Com --combined gera, em vez dos PDFs por campus/coach, um único PDF contendo
+as etiquetas de todos os campi (ou do campus filtrado, se --campus for usado).
+Nesse modo o envio de emails (--send) é ignorado, pois não há um único
+coordenador para o PDF combinado.
+
 Uso:
     uv run python gerar_etiquetas.py [--usuarios output/usuarios.txt]
                                   [--csv equipes_interif.csv]
@@ -18,6 +23,7 @@ Uso:
                                   [-o etiquetas/]
                                   [-s / --send]
                                   [--dry-run]
+                                  [--combined]
 """
 
 import argparse
@@ -60,6 +66,10 @@ _HERE = Path(__file__).parent
 _ASSETS = _HERE / "assets"
 USUARIOS_FILE = _HERE / "output" / "usuarios.txt"
 LOGO_PATH = _ASSETS / "logo.png"
+
+# Sufixo aplicado a todo nome de PDF gerado, para diferenciar de crachás/placas
+# quando os três scripts escrevem no mesmo diretório de saída.
+_TIPO = "Etiquetas"
 
 # ── Layout das etiquetas ──────────────────────────────────────────────────────
 
@@ -246,6 +256,15 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Gera os PDFs mas não envia emails (implica --send em modo simulado)",
     )
+    parser.add_argument(
+        "--combined",
+        action="store_true",
+        help=(
+            "Gera um único PDF com todas as etiquetas de todos os campi "
+            "(ou do campus filtrado por --campus), em vez de PDFs separados "
+            "por campus/coach. Ignora --send."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -298,20 +317,48 @@ def main() -> None:
             sys.exit(0)
         print(f"Filtrando apenas o campus {args.campus.upper()!r}: {len(credenciais)} equipe(s).\n")
 
+    # Cria diretório de saída
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # ── Modo combinado: um único PDF com todas as etiquetas ───────────────────
+    if args.combined:
+        if args.send:
+            print(
+                "Aviso: --send é ignorado em modo --combined "
+                "(não há um coordenador único para o PDF combinado).\n"
+            )
+
+        credenciais_ordenadas = sorted(
+            credenciais, key=lambda c: (c.campus or c.sigla or "", c.nome_equipe)
+        )
+
+        nome_arquivo = _limpar_nome("IFSP_-_Todos_os_Campi") + f"-{_TIPO}.pdf"
+        caminho_pdf = output_dir / nome_arquivo
+        gerar_pdf_campus(credenciais_ordenadas, caminho_pdf)
+
+        print(f"OK combinado: {caminho_pdf} ({len(credenciais_ordenadas)} etiqueta(s))")
+
+        print()
+        rows_combinado: list[list[str | int]] = [
+            ["Equipes", len(credenciais_ordenadas)],
+            ["Campi", len({c.campus or c.sigla or c.username for c in credenciais_ordenadas})],
+            ["PDFs gerados", 1],
+        ]
+        print("Resumo")
+        print(tabulate(rows_combinado, tablefmt="simple"))
+        return
+
     # Agrupa por campus (mantém label = campus_raw como chave de exibição)
     por_campus: dict[str, list[CredencialEquipe]] = defaultdict(list)
     for cred in credenciais:
         por_campus[cred.campus or cred.sigla or cred.username].append(cred)
-
-    # Cria diretório de saída
-    output_dir.mkdir(parents=True, exist_ok=True)
 
     n_pdfs = 0
     n_emails = 0
 
     # ── PDFs por campus (enviados ao coordenador) ─────────────────────────────
     for campus, grupo in por_campus.items():
-        nome_arquivo = _limpar_nome(f"IFSP_-_{campus}") + ".pdf"
+        nome_arquivo = _limpar_nome(f"IFSP_-_{campus}") + f"-{_TIPO}.pdf"
         caminho_pdf = output_dir / nome_arquivo
 
         gerar_pdf_campus(grupo, caminho_pdf)
@@ -356,7 +403,7 @@ def main() -> None:
         campi_coach = sorted({c.campus for c in grupo_coach if c.campus})
         campus_str = ", ".join(campi_coach) if campi_coach else "campus desconhecido"
 
-        nome_arquivo_coach = _limpar_nome(nome_coach) + ".pdf"
+        nome_arquivo_coach = _limpar_nome(nome_coach) + f"-{_TIPO}.pdf"
         caminho_pdf_coach = coaches_dir / nome_arquivo_coach
 
         gerar_pdf_campus(grupo_coach, caminho_pdf_coach)

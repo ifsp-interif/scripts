@@ -7,6 +7,11 @@ Lê username/senha de usuarios.txt (fonte da verdade gerada por gerar_arquivos_b
 e dados das equipes do CSV de inscrições.  Salva um PDF por campus no diretório de
 saída.  Com --send envia cada PDF ao coordenador via `gws gmail +send --attach`.
 
+Com --combined gera, em vez dos PDFs por campus, um único PDF contendo as
+placas de todos os campi (ou do campus filtrado, se --campus for usado).
+Nesse modo o envio de emails (--send) é ignorado, pois não há um único
+coordenador para o PDF combinado.
+
 Uso:
     uv run python gerar_placas.py [--usuarios output/usuarios.txt]
                                   [--csv equipes_interif.csv]
@@ -15,6 +20,7 @@ Uso:
                                   [-o placas/]
                                   [-s / --send]
                                   [--dry-run]
+                                  [--combined]
 """
 
 import argparse
@@ -66,6 +72,16 @@ _ASSETS = _HERE / "assets"
 USUARIOS_FILE = _HERE / "output" / "usuarios.txt"
 LOGO_PATH = _ASSETS / "logo.png"
 LOGO_DIREITA = _ASSETS / "IFSP_Logo.jpg"
+
+# Sufixo aplicado a todo nome de PDF gerado, para diferenciar de etiquetas/crachás
+# quando os três scripts escrevem no mesmo diretório de saída.
+_TIPO = "Placas"
+
+# ── Layout do nome da equipe ──────────────────────────────────────────────────
+
+_LARG_PAG, _ALT_PAG = landscape(A4)
+_MARGEM_RECUO = 10
+_LARGURA_UTIL_NOME = _LARG_PAG - 2 * _MARGEM_RECUO - 55
 
 # ── Helpers de nome de arquivo ────────────────────────────────────────────────
 
@@ -181,14 +197,42 @@ def _ajustar_fonte(
     return tamanho_min
 
 
+def _tamanho_comum(
+    textos: list[str],
+    fonte: str = "PlacaNomeBold",
+    tamanho_max: int = 72,
+    tamanho_min: int = 8,
+) -> int:
+    """
+    Devolve o maior tamanho de fonte que faz TODOS os textos caberem em
+    `_LARGURA_UTIL_NOME` — ou seja, o tamanho ditado pelo texto mais longo do
+    lote (nome de equipe ou campus, conforme os textos passados).  Usado para
+    que cada campo tenha sempre o mesmo tamanho em todas as placas geradas
+    numa mesma execução, em vez de variar placa a placa.
+    """
+    if not textos:
+        return tamanho_max
+    return min(_ajustar_fonte(t, _LARGURA_UTIL_NOME, fonte, tamanho_max, tamanho_min) for t in textos)
+
+
 # ── Geração de PDF ────────────────────────────────────────────────────────────
 
 
-def gerar_pdf_campus(credenciais: list[CredencialEquipe], caminho_pdf: Path) -> None:
+def gerar_pdf_campus(
+    credenciais: list[CredencialEquipe],
+    caminho_pdf: Path,
+    *,
+    tam_nome: int,
+    tam_campus: int,
+) -> None:
     """
     Gera um PDF com uma página landscape A4 por equipe.
     O gradiente de fundo é criado em memória uma única vez e reutilizado em todas
     as páginas via ImageReader (que cacheia internamente).
+
+    `tam_nome` e `tam_campus` são fixos e devem ser calculados uma única vez
+    (via `_tamanho_comum`) sobre todo o lote de equipes da execução, para que
+    o tamanho da fonte não varie de placa para placa.
     """
     larg_pag, alt_pag = landscape(A4)
     largura, altura = int(larg_pag), int(alt_pag)
@@ -226,19 +270,16 @@ def gerar_pdf_campus(credenciais: list[CredencialEquipe], caminho_pdf: Path) -> 
                     mask="auto",
                 )
 
-        # ── nome da equipe (centralizado, tamanho automático) ──────────────────
+        # ── nome da equipe (centralizado, tamanho fixo) ─────────────────────────
         fullname = f"[IFSP - {cred.sigla or cred.campus}] {cred.nome_equipe}"
         _, nome_eq = _separar_por_colchete(fullname)
-        margem_recuo = 10
-        largura_util = larg_pag - 2 * margem_recuo - 55
-        tamanho_nome = _ajustar_fonte(nome_eq, largura_util, "PlacaNomeBold")
 
-        c.setFont("PlacaNomeBold", tamanho_nome)
+        c.setFont("PlacaNomeBold", tam_nome)
         c.drawCentredString(larg_pag / 2, alt_pag / 2 - 30, nome_eq)
 
-        # ── campus (fonte fina, tamanho ligeiramente menor) ────────────────────
+        # ── campus (fonte fina, tamanho próprio e fixo) ─────────────────────────
         campus_label = f"IFSP - {cred.sigla or cred.campus}"
-        c.setFont("PlacaNome", max(tamanho_nome - 30, 8))
+        c.setFont("PlacaNome", tam_campus)
         c.drawCentredString(larg_pag / 2, alt_pag / 2 - 90, campus_label)
 
         # ── faixa preta inferior com data do evento ────────────────────────────
@@ -317,6 +358,15 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Gera os PDFs mas não envia emails (implica --send em modo simulado)",
     )
+    parser.add_argument(
+        "--combined",
+        action="store_true",
+        help=(
+            "Gera um único PDF com todas as placas de todos os campi "
+            "(ou do campus filtrado por --campus), em vez de PDFs separados "
+            "por campus. Ignora --send."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -369,22 +419,66 @@ def main() -> None:
             sys.exit(0)
         print(f"Filtrando apenas o campus {args.campus.upper()!r}: {len(credenciais)} equipe(s).\n")
 
+    # Tamanho de fonte único para o nome da equipe e para o campus em todas as
+    # placas desta execução — calculado a partir do texto mais longo do lote
+    # de cada campo, para não variar placa a placa. O campus tem seu próprio
+    # tamanho (não mais derivado do nome), com um piso bem maior para
+    # permanecer legível.
+    nomes_equipe = [
+        _separar_por_colchete(f"[IFSP - {c.sigla or c.campus}] {c.nome_equipe}")[1]
+        for c in credenciais
+    ]
+    tam_nome = _tamanho_comum(nomes_equipe, "PlacaNomeBold")
+
+    campus_labels = [f"IFSP - {c.sigla or c.campus}" for c in credenciais]
+    tam_campus = _tamanho_comum(campus_labels, "PlacaNome", tamanho_max=28, tamanho_min=16)
+
+    print(f"Fonte do nome da equipe: {tam_nome}pt | Fonte do campus: {tam_campus}pt\n")
+
+    # Cria diretório de saída
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # ── Modo combinado: um único PDF com todas as placas ──────────────────────
+    if args.combined:
+        if args.send:
+            print(
+                "Aviso: --send é ignorado em modo --combined "
+                "(não há um coordenador único para o PDF combinado).\n"
+            )
+
+        credenciais_ordenadas = sorted(
+            credenciais, key=lambda c: (c.campus or c.sigla or "", c.nome_equipe)
+        )
+
+        nome_arquivo = _limpar_nome("IFSP_-_Todos_os_Campi") + f"-{_TIPO}.pdf"
+        caminho_pdf = output_dir / nome_arquivo
+        gerar_pdf_campus(credenciais_ordenadas, caminho_pdf, tam_nome=tam_nome, tam_campus=tam_campus)
+
+        print(f"OK combinado: {caminho_pdf} ({len(credenciais_ordenadas)} placa(s))")
+
+        print()
+        rows_combinado: list[list[str | int]] = [
+            ["Equipes", len(credenciais_ordenadas)],
+            ["Campi", len({c.campus or c.sigla or c.username for c in credenciais_ordenadas})],
+            ["PDFs gerados", 1],
+        ]
+        print("Resumo")
+        print(tabulate(rows_combinado, tablefmt="simple"))
+        return
+
     # Agrupa por campus
     por_campus: dict[str, list[CredencialEquipe]] = defaultdict(list)
     for cred in credenciais:
         por_campus[cred.campus or cred.sigla or cred.username].append(cred)
 
-    # Cria diretório de saída
-    output_dir.mkdir(parents=True, exist_ok=True)
-
     n_pdfs = 0
     n_emails = 0
 
     for campus, grupo in por_campus.items():
-        nome_arquivo = _limpar_nome(f"IFSP_-_{campus}") + ".pdf"
+        nome_arquivo = _limpar_nome(f"IFSP_-_{campus}") + f"-{_TIPO}.pdf"
         caminho_pdf = output_dir / nome_arquivo
 
-        gerar_pdf_campus(grupo, caminho_pdf)
+        gerar_pdf_campus(grupo, caminho_pdf, tam_nome=tam_nome, tam_campus=tam_campus)
         n_pdfs += 1
 
         print(f"OK: {campus} -> {caminho_pdf} ({len(grupo)} placa(s))")
